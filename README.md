@@ -307,6 +307,12 @@ Deployment and the authenticated remote MCP service are separate operations. The
 
 Activity deployment also creates an Azure Bot registration and generates [Teams setup instructions](src/charts_agent/TEAMS_APP_SETUP.md). App packaging, tenant approval and channel acceptance remain separate steps; this is a bot integration, **not a Teams tab**.
 
+The [Teams/M365 sideload package](m365sideloadmanifest/README.md) provides the
+existing bot's manifest, six sample conversation starters, and original color
+and outline icons. Its builder checks icon pixels and creates a three-file ZIP.
+This custom-engine/Activity package is separate from the declarative-agent/MCP
+example in [appPackage](appPackage/); neither bypasses tenant sideloading policies.
+
 Blob images use read-only, HTTPS-only **user-delegation SAS** URLs with a default lifetime of 60 minutes. No storage account key or anonymous container is required. URLs will expire in old messages; storage retention/lifecycle rules and a refresh strategy are production decisions, not hidden guarantees in this sample. `ARTIFACT_TTL_MINUTES` supports 1–1440 minutes, but a hosted override also requires adding it to the service's forwarded `environmentVariables`; setting a local `.env` or azd value alone is insufficient. Local files persist under the ignored artifact directory and must be cleaned up when no longer needed.
 
 In production local artifact mode fails closed. Localhost image URLs cannot be used by remote M365 clients. The source context also reports a Copilot image-display regression; this sample cannot fix client/platform regressions, so validate image fallback in the target tenant.

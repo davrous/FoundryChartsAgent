@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <title>Foundry Charts</title>
+  <rect width="192" height="192" fill="#2735A6"/>
+  <rect x="52" y="108" width="20" height="34" rx="4" fill="#76E5F3"/>
+  <rect x="86" y="92" width="20" height="50" rx="4" fill="#B6EEFF"/>
+  <rect x="120" y="76" width="20" height="66" rx="4" fill="#FFFFFF"/>
+  <path d="M55 91 85 67 104 75 136 54" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="136" cy="54" r="4" fill="#FFFFFF"/>
+</svg>
