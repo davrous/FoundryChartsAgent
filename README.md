@@ -204,7 +204,11 @@ The gateway supports two independent upstream modes:
 
 See [gateway configuration](gateway/.env.example) for the exact variables. For a deployed agent select Foundry mode, set the project endpoint and `FOUNDRY_AGENT_NAME` (and version if required). Run the gateway separately on a service suitable for public HTTP hosting; Foundry's protocol gateway is not a general-purpose web/MCP reverse proxy.
 
-Connect an MCP Apps-capable client to **http://localhost:8190/mcp** for local testing. `get_chart` and `drill_chart` reference `ui://charts/app.html`; the resource is served with `text/html;profile=mcp-app` and resource-level CSP metadata. Hosts without Apps support still receive useful text/structured tool results.
+Connect an MCP Apps-capable client to **http://127.0.0.1:8190/mcp** for local testing. `get_chart` and `drill_chart` reference `ui://charts/app.html`; the resource is served with `text/html;profile=mcp-app` and resource-level CSP metadata. Hosts without Apps support still receive useful text/structured tool results.
+
+For Claude Desktop, follow the [local MCP App setup](gateway/README.md#claude-desktop-local-mcp-app),
+including the Node/nvm fix if Desktop launches an older Node than your terminal.
+The gateway must already be running; the `mcp-remote` configuration does not start it.
 
 The UI bundles its dependencies, uses SVG, and shares its rendering component between chat and the MCP widget. Local filters act on the returned aggregate rows without a model or API call; drill-down performs a new query through the hosted agent. Local filters therefore do not recover raw records that were never returned.
 

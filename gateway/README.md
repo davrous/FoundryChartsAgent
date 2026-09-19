@@ -32,6 +32,104 @@ On Windows, use `src/charts_agent/.venv/Scripts/python.exe -m gateway.main`
 from the repository root. The root `chartagent web` / `chartagent.ps1 web`
 launchers and VS Code gateway task use the same entry point.
 
+## Claude Desktop: local MCP App
+
+Use **Claude Desktop's chat** to test the interactive MCP App. Claude Code has a
+separate MCP configuration; changing Desktop settings does not register a server
+in the CLI. The [MCP Apps documentation](https://modelcontextprotocol.io/docs/extensions/apps)
+describes the graphical host experience.
+
+Start the two services in separate terminals from the repository root:
+
+```bash
+./chartagent dev
+./chartagent web
+```
+
+Keep both running. The bridge below connects to an existing gateway; it does
+not start the gateway or agent. In the default `GATEWAY_MODE=local`, both services
+are needed. A gateway configured for `foundry` instead calls the deployed agent
+and does not need the local agent.
+
+In Claude Desktop, open **Settings > Developer > Edit Config**. On macOS this
+edits `~/Library/Application Support/Claude/claude_desktop_config.json`. Merge
+this entry into the existing `mcpServers` object; preserve other servers:
+
+```json
+{
+  "mcpServers": {
+    "my-local-app": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote@0.13.5", "http://127.0.0.1:8190/mcp"]
+    }
+  }
+}
+```
+
+This bridge version was verified with **Node 22.20.0**. Its installed dependency
+`undici@7.29.1` requires Node >=20.18.1; Node 18 fails before connecting with
+`npm WARN EBADENGINE` and `ReferenceError: File is not defined`.
+
+**macOS / nvm:** Desktop can discover an older Node even when your terminal uses
+a newer one. If that happens, set both an absolute `command` and `env.PATH` in
+this server entry. An absolute `npx` path alone is not sufficient: its
+`#!/usr/bin/env node` launcher still selects Node from `PATH`.
+
+For example, with an existing nvm installation of Node 22.20.0, replace both
+occurrences of `YOUR_USER` with your macOS username (JSON does not expand `~`):
+
+```json
+{
+  "mcpServers": {
+    "my-local-app": {
+      "command": "/Users/YOUR_USER/.nvm/versions/node/v22.20.0/bin/npx",
+      "args": ["-y", "mcp-remote@0.13.5", "http://127.0.0.1:8190/mcp"],
+      "env": {
+        "PATH": "/Users/YOUR_USER/.nvm/versions/node/v22.20.0/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
+    }
+  }
+}
+```
+
+Use your actual installed Node directory if the version/path differs. This
+changes only the bridge process, not your system or other projects' Node version.
+
+Fully quit and reopen Claude Desktop after editing. Verify the server connects
+under Developer settings, enable its tools for a new chat, then ask:
+
+> Use my-local-app's get_chart tool to show 2025 revenue by region and channel
+> as a grouped bar chart. Display the interactive chart app.
+
+Hover over bars, select a local filter, and drill into a region. Local filters
+operate on returned rows without a model call; drill-down calls `drill_chart`
+through the host. Seeing tool text alone does not prove the embedded app rendered:
+check that the chart and its controls are visible in the conversation.
+
+### Troubleshooting the Desktop connection
+
+- Check `http://127.0.0.1:8190/health` and, in local mode,
+  `http://127.0.0.1:8088/health`. Gateway health alone does not prove upstream
+  readiness. The gateway mode is included in its health response.
+- On macOS, inspect `~/Library/Logs/Claude/mcp-server-my-local-app.log`.
+  `File is not defined` / `EBADENGINE` indicates the Node mismatch above;
+  `ENOENT` indicates an executable/path problem; `ECONNREFUSED` indicates a
+  missing listener or wrong address/port.
+- Use `127.0.0.1` to match the default IPv4 listener. Opening `/mcp` in a browser
+  is not an MCP handshake; the endpoint expects MCP messages and transport headers.
+- If tools connect but reading `ui://charts/app.html` fails, run
+  `npm --prefix web run build` and retry. It must return the bundled HTML with
+  MIME type `text/html;profile=mcp-app`.
+- If the chart is missing despite a successful tool result and resource read,
+  check the Desktop version and MCP Apps support. Use the
+  [local MCP host harness](../README.md#development-and-verification) to isolate widget
+  behavior from host integration.
+
+Do not disable production authentication or expose this anonymous loopback
+gateway publicly to fix a Desktop registration problem. See
+[mcp-remote's documentation](https://github.com/geelen/mcp-remote#readme)
+for bridge transport and authentication options.
+
 ## Hosting distinction
 
 The hosted agent and this gateway are **two independent services**. Foundry
