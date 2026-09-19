@@ -17,7 +17,7 @@
       "python": "${workspaceFolder}/src/charts_agent/.venv/bin/python",
       "cwd": "${workspaceFolder}/src/charts_agent",
       "envFile": "${workspaceFolder}/src/charts_agent/.env",
-      "env": {"PORT": "8188"},
+      "env": {"PORT": "8088"},
       "windows": {"python": "${workspaceFolder}/src/charts_agent/.venv/Scripts/python.exe"}
     }
   ]

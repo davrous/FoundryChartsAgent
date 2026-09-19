@@ -68,7 +68,9 @@ In a second terminal:
 ./chartagent web
 ```
 
-Open **http://localhost:8190**. The agent runs at **http://localhost:8188**, avoiding the Blender sample's default 8088 port.
+Open **http://localhost:8190**. The agent runs at **http://localhost:8088** by default.
+To use another agent port, set `PORT` for both `dev` and `playground`, and set
+`LOCAL_AGENT_URL` to the matching URL for `web`.
 
 On Windows, use the equivalent `./chartagent.ps1 setup`, `dev`, `web`, `playground`, and `test` commands.
 
@@ -101,7 +103,7 @@ Native development is the simplest keyless path. A plain local Python container 
 ### Responses API
 
 ```bash
-curl http://localhost:8188/responses \
+curl http://localhost:8088/responses \
   -H 'Content-Type: application/json' \
   -d '{"input":"Show revenue by region","stream":false}'
 ```
@@ -141,7 +143,7 @@ For a local container, the callback must be reachable from inside it:
 PLAYGROUND_SERVICE_URL=http://host.docker.internal:56150/_connector ./chartagent playground
 ```
 
-The endpoint is still `http://localhost:8188/api/messages`. Do not change the native-process callback to `host.docker.internal`. If using a nondefault Playground port, change **both** its `--port` and the callback port.
+The endpoint is still `http://localhost:8088/api/messages`. Do not change the native-process callback to `host.docker.internal`. If using a nondefault Playground port, change **both** its `--port` and the callback port.
 
 Use `/clear` to clear Activity conversation history. Chart cards include drill-down `Action.Submit` actions where the current grouping permits them. Typing activities keep longer requests alive; turns have a bounded timeout and report failures.
 

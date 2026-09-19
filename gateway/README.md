@@ -18,7 +18,7 @@ npm --prefix web run build
 src/charts_agent/.venv/bin/python -m gateway.main
 ```
 
-Defaults follow the project launchers: agent `127.0.0.1:8188`, gateway
+Defaults follow the project launchers: agent `127.0.0.1:8088`, gateway
 `127.0.0.1:8190`. Override `LOCAL_AGENT_URL` / `GATEWAY_PORT` to use another
 endpoint/port. The upstream endpoint is never accepted from a browser request.
 `gateway.main` loads `gateway/.env`, then fills missing settings from

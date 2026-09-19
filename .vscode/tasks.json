@@ -5,14 +5,14 @@
       "label": "Validate prerequisites",
       "type": "aitk",
       "command": "debug-check-prerequisites",
-      "args": {"portOccupancy": [5679, 8188]}
+      "args": {"portOccupancy": [5679, 8088]}
     },
     {
       "label": "Run chart agent",
       "type": "shell",
       "command": "${workspaceFolder}/src/charts_agent/.venv/bin/python",
       "args": ["main.py"],
-      "options": {"cwd": "${workspaceFolder}/src/charts_agent", "env": {"PORT": "8188"}},
+      "options": {"cwd": "${workspaceFolder}/src/charts_agent", "env": {"PORT": "8088"}},
       "isBackground": true,
       "windows": {"command": "${workspaceFolder}/src/charts_agent/.venv/Scripts/python.exe"},
       "problemMatcher": {
@@ -26,7 +26,7 @@
       "type": "shell",
       "command": "${workspaceFolder}/src/charts_agent/.venv/bin/python",
       "args": ["-m", "debugpy", "--listen", "127.0.0.1:5679", "main.py"],
-      "options": {"cwd": "${workspaceFolder}/src/charts_agent", "env": {"PORT": "8188"}},
+      "options": {"cwd": "${workspaceFolder}/src/charts_agent", "env": {"PORT": "8088"}},
       "windows": {"command": "${workspaceFolder}/src/charts_agent/.venv/Scripts/python.exe"},
       "dependsOn": ["Validate prerequisites"],
       "isBackground": true,
@@ -62,7 +62,7 @@
       "id": "openAgentInspector",
       "type": "command",
       "command": "ai-mlstudio.openTestTool",
-      "args": {"triggeredFrom": "tasks", "port": 8188}
+      "args": {"triggeredFrom": "tasks", "port": 8088}
     }
   ]
 }

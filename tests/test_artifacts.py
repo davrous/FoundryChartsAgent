@@ -3,16 +3,24 @@ import pytest
 from artifact_storage import ArtifactStore
 
 
-async def test_local_artifact_bytes_and_urls(monkeypatch, tmp_path):
+@pytest.mark.parametrize("base_url, expected_url", [
+    (None, "http://localhost:8088/artifacts"),
+    ("http://localhost:9091/artifacts", "http://localhost:9091/artifacts"),
+])
+async def test_local_artifact_bytes_and_urls(monkeypatch, tmp_path, base_url, expected_url):
     monkeypatch.setenv("CHARTS_DEV_MODE", "true")
     monkeypatch.setenv("ARTIFACT_MODE", "local")
     monkeypatch.setenv("ARTIFACT_DIRECTORY", str(tmp_path))
-    monkeypatch.setenv("ARTIFACT_BASE_URL", "http://localhost:8188/artifacts")
+    if base_url is None:
+        monkeypatch.delenv("ARTIFACT_BASE_URL", raising=False)
+    else:
+        monkeypatch.setenv("ARTIFACT_BASE_URL", base_url)
     store = ArtifactStore()
     urls = await store.save("test", b"PNG", "<svg/>")
     assert (tmp_path / "test.png").read_bytes() == b"PNG"
     assert (tmp_path / "test.svg").read_text() == "<svg/>"
-    assert urls["png"] == "http://localhost:8188/artifacts/test.png"
+    assert urls["png"] == f"{expected_url}/test.png"
+    assert urls["svg"] == f"{expected_url}/test.svg"
     await store.close()
 
 

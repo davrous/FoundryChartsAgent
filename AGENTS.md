@@ -22,7 +22,7 @@ The **Azure Developer CLI (`azd`)** manages the full lifecycle:
 ./chartagent test
 ```
 
-Use ports 8188 (agent) and 8190 (gateway) to avoid the Blender sample's 8088.
+Use ports 8088 (agent) and 8190 (gateway) by default.
 Read README.md before a deployment: local artifacts and anonymous gateway
 mode are development-only. Never provision, deploy, or change Azure resources
 without the user's approval. Do not add a Teams tab.

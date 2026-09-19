@@ -1,10 +1,42 @@
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
 
 import httpx
 import pytest
 from starlette.testclient import TestClient
 
 from contracts import ChartBundle, ChartRequest, ChartRow
+
+
+@pytest.mark.parametrize("dev_mode, port, expected_port", [
+    ("true", None, "8088"),
+    ("false", None, "8088"),
+    ("true", "9091", "9091"),
+])
+def test_agent_port_default_and_override(dev_mode, port, expected_port):
+    environment = {**os.environ, "CHARTS_DEV_MODE": dev_mode}
+    environment.pop("PORT", None)
+    if port is not None:
+        environment["PORT"] = port
+    result = subprocess.run(
+        [sys.executable, "-c", (
+            "import os\n"
+            "from unittest.mock import patch\n"
+            "with patch('dotenv.load_dotenv'):\n"
+            "    import main\n"
+            "print(os.environ['PORT'])\n"
+        )],
+        cwd=Path(__file__).resolve().parents[1] / "src" / "charts_agent",
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == expected_port
 
 
 def bundle(request: ChartRequest) -> ChartBundle:

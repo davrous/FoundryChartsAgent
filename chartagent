@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 AGENT="$ROOT/src/charts_agent"
 PY="$AGENT/.venv/bin/python"
-PORT="${PORT:-8188}"
+PORT="${PORT:-8088}"
 cd "$ROOT"
 
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -57,7 +57,7 @@ case "$verb" in
     help|-h|--help)
         printf '%s\n' \
             'chartagent setup              Install declared Python/web dependencies and build both UIs' \
-            'chartagent dev                Run native hosted agent on localhost:8188 (az login credentials)' \
+            'chartagent dev                Run native hosted agent on localhost:8088 (az login credentials)' \
             'chartagent web                Run web chat and MCP gateway on localhost:8190' \
             'chartagent playground         Connect M365 Agents Playground to the running agent' \
             'chartagent rebuild|start|up    Build/run optional container (explicit Azure credentials required)' \

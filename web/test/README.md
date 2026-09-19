@@ -1,6 +1,6 @@
 # Browser MCP App smoke test (development only)
 
-Run the normal hosted agent on **8188** and gateway on **8190**, then:
+Run the normal hosted agent on **8088** and gateway on **8190**, then:
 
 ```bash
 npm --prefix web run build

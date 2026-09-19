@@ -51,6 +51,14 @@ def test_entry_point_loads_gateway_then_agent_env_without_overriding_process_set
     assert run.call_args.kwargs["port"] == 8190
 
 
+def test_local_agent_url_default_and_override(monkeypatch):
+    monkeypatch.delenv("LOCAL_AGENT_URL", raising=False)
+    assert Settings().local_agent_url == "http://127.0.0.1:8088"
+    assert Settings.from_env().local_agent_url == "http://127.0.0.1:8088"
+    monkeypatch.setenv("LOCAL_AGENT_URL", "http://127.0.0.1:9091")
+    assert Settings.from_env().local_agent_url == "http://127.0.0.1:9091"
+
+
 @pytest.fixture
 def bundle():
     request = ChartRequest()
@@ -106,7 +114,7 @@ def test_chat_and_drill_forward_to_the_hosted_responses_endpoint(bundle):
         assert response.status_code == 200
         assert response.json()["charts"] == [bundle]
         forwarded = json.loads(requests[0].content)
-        assert str(requests[0].url) == "http://127.0.0.1:8188/responses"
+        assert str(requests[0].url) == "http://127.0.0.1:8088/responses"
         assert forwarded == {
             "input": "Revenue?", "stream": False, "previous_response_id": "resp_old",
             "metadata": {"chart_output": "interactive"},

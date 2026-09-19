@@ -12,7 +12,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 load_dotenv(Path(__file__).with_name(".env"))
-os.environ.setdefault("PORT", "8188" if os.getenv("CHARTS_DEV_MODE", "false").lower() == "true" else "8088")
+os.environ.setdefault("PORT", "8088")
 os.environ.setdefault("OTEL_EXPERIMENTAL_RESOURCE_DETECTORS", "otel,host,os,process,service_instance")
 
 from activity_bridge import build_host  # noqa: E402

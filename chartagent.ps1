@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 $Agent = Join-Path $PSScriptRoot "src/charts_agent"
 $Python = Join-Path $Agent ".venv/Scripts/python.exe"
-$AgentPort = if ($env:PORT) { $env:PORT } else { "8188" }
+$AgentPort = if ($env:PORT) { $env:PORT } else { "8088" }
 function Check-Exit { if ($LASTEXITCODE -ne 0) { throw "Command failed ($LASTEXITCODE)" } }
 switch ($Command) {
     "setup" {

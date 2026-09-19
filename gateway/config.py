@@ -21,7 +21,7 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8190
     dev_mode: bool = False
-    local_agent_url: str = "http://127.0.0.1:8188"
+    local_agent_url: str = "http://127.0.0.1:8088"
     project_endpoint: str = ""
     agent_name: str = ""
     agent_version: str = ""
@@ -39,7 +39,7 @@ class Settings:
             host=os.getenv("GATEWAY_HOST", "127.0.0.1"),
             port=int(os.getenv("GATEWAY_PORT", "8190")),
             dev_mode=os.getenv("CHARTS_DEV_MODE", "").lower() == "true",
-            local_agent_url=os.getenv("LOCAL_AGENT_URL", "http://127.0.0.1:8188"),
+            local_agent_url=os.getenv("LOCAL_AGENT_URL", "http://127.0.0.1:8088"),
             project_endpoint=os.getenv("FOUNDRY_PROJECT_ENDPOINT", ""),
             agent_name=os.getenv("FOUNDRY_AGENT_NAME", ""),
             agent_version=os.getenv("FOUNDRY_AGENT_VERSION", ""),

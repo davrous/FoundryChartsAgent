@@ -13,7 +13,7 @@ class ArtifactStore:
     def __init__(self) -> None:
         self.mode = os.getenv("ARTIFACT_MODE", "local")
         self.directory = Path(os.getenv("ARTIFACT_DIRECTORY", "artifacts")).resolve()
-        self.base_url = os.getenv("ARTIFACT_BASE_URL", "http://localhost:8188/artifacts").rstrip("/")
+        self.base_url = os.getenv("ARTIFACT_BASE_URL", "http://localhost:8088/artifacts").rstrip("/")
         self.credential: DefaultAzureCredential | None = None
         self.client: BlobServiceClient | None = None
         if self.mode == "local":
