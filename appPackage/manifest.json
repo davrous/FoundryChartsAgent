@@ -1,0 +1,34 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.26/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.26",
+  "version": "1.0.0",
+  "id": "${{COPILOT_APP_ID}}",
+  "developer": {
+    "name": "${{PUBLISHER_NAME}}",
+    "websiteUrl": "${{WEBSITE_URL}}",
+    "privacyUrl": "${{PRIVACY_URL}}",
+    "termsOfUseUrl": "${{TERMS_URL}}"
+  },
+  "name": {
+    "short": "Foundry Charts",
+    "full": "Foundry Charts sales analyst"
+  },
+  "description": {
+    "short": "Explore fictional sales with an interactive chart analyst.",
+    "full": "Ask the Microsoft Foundry hosted analyst about synthetic 2025 sales. Explore the returned charts with mouse tooltips, local category and series filters, SVG download, and server-side drill-down. All chart generation and Azure credentials remain on the server."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#7453A7",
+  "copilotAgents": {
+    "declarativeAgents": [
+      {
+        "id": "salesAnalyst",
+        "file": "declarativeAgent.json"
+      }
+    ]
+  },
+  "validDomains": ["${{GATEWAY_HOSTNAME}}"]
+}

@@ -1,0 +1,2 @@
+:root { color-scheme: light; --ink: #272131; --secondary: #564e61; --muted: #82798c; --page: #fcfbfd; --surface: #fff; --sidebar: #f7f5f9; --line: #eae6ee; --accent: #7453a7; --accent-soft: #f0eaf9; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --ink: #ede8f5; --secondary: #c5bcd1; --muted: #a498b4; --page: #19161f; --surface: #231f2b; --sidebar: #201c26; --line: #38303f; --accent: #a084ce; --accent-soft: #342b43; } }

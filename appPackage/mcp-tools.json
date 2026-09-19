@@ -1,0 +1,71 @@
+{
+  "tools": [
+    {
+      "name": "get_chart",
+      "description": "Ask the hosted sales agent for charts. Follow up with previous_response_id for continuity.",
+      "inputSchema": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "previous_response_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Previous Response Id"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "get_chartArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "get_chartDictOutput",
+        "type": "object"
+      },
+      "_meta": {
+        "ui": {
+          "resourceUri": "ui://charts/app.html"
+        }
+      }
+    },
+    {
+      "name": "drill_chart",
+      "description": "Render a validated ChartRequest via the hosted agent; never runs a separate chart engine.",
+      "inputSchema": {
+        "properties": {
+          "request": {
+            "additionalProperties": true,
+            "title": "Request",
+            "type": "object"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "title": "drill_chartArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "title": "drill_chartDictOutput",
+        "type": "object"
+      },
+      "_meta": {
+        "ui": {
+          "resourceUri": "ui://charts/app.html"
+        }
+      }
+    }
+  ]
+}

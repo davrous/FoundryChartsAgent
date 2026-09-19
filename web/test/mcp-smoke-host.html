@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>MCP App strict-CSP smoke host · test only</title>
+    <style>
+      body { margin: 24px; background: #f7f5fa; color: #292033; font: 14px system-ui, sans-serif; }
+      h1 { font-size: 20px; } p, li { line-height: 1.7; }
+      .panel { max-width: 1150px; margin: auto; }
+      #status { padding: 12px; background: white; border: 1px solid #ded8e5; border-radius: 8px; }
+      #status[data-state="error"] { color: #b32d45; }
+      iframe { width: 100%; height: 1100px; border: 0; background: white; border-radius: 12px; }
+      code { font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <h1>MCP App strict-CSP smoke host — test only</h1>
+      <p>This is the production single-file widget in a separate-origin sandbox.
+        Its CSP permits inline bundled code but <strong>no unsafe-eval, network requests, CDN, or external assets</strong>.
+        Only the UI host handshake is simulated. Initial chart and drill tool calls reach the real local gateway.</p>
+      <p id="status" role="status" data-state="loading">Preparing the initial chart…</p>
+      <p>Initial tool-result notifications: <span id="notification-count">0</span> ·
+        Direct app tool calls: <span id="call-count">0</span></p>
+      <ol>
+        <li>Hover a chart mark: its values must appear in a DOM tooltip.</li>
+        <li>Filter Categories and Series: mark/data counts must change without another server call.</li>
+        <li>Reset filters: all data must return.</li>
+        <li>Choose Europe and drill down: France/Germany must replace the chart. The notification count stays one.</li>
+      </ol>
+      <div id="widget-container"></div>
+      <pre id="protocol-log" aria-label="Protocol log"></pre>
+    </main>
+    <script type="module" src="/host.js"></script>
+  </body>
+</html>

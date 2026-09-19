@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Charts: hosted agent with Inspector",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {"host": "127.0.0.1", "port": 5679},
+      "preLaunchTask": "Open Agent Inspector",
+      "justMyCode": true
+    },
+    {
+      "name": "Charts: hosted agent",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/charts_agent/main.py",
+      "python": "${workspaceFolder}/src/charts_agent/.venv/bin/python",
+      "cwd": "${workspaceFolder}/src/charts_agent",
+      "envFile": "${workspaceFolder}/src/charts_agent/.env",
+      "env": {"PORT": "8188"},
+      "windows": {"python": "${workspaceFolder}/src/charts_agent/.venv/Scripts/python.exe"}
+    }
+  ]
+}

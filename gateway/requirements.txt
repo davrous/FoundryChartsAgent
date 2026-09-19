@@ -1,0 +1,2 @@
+# Keep the gateway and hosted agent on the same tested MCP/Agent Framework dependency set.
+-r ../requirements.lock

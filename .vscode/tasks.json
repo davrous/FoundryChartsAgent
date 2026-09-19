@@ -1,0 +1,68 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Validate prerequisites",
+      "type": "aitk",
+      "command": "debug-check-prerequisites",
+      "args": {"portOccupancy": [5679, 8188]}
+    },
+    {
+      "label": "Run chart agent",
+      "type": "shell",
+      "command": "${workspaceFolder}/src/charts_agent/.venv/bin/python",
+      "args": ["main.py"],
+      "options": {"cwd": "${workspaceFolder}/src/charts_agent", "env": {"PORT": "8188"}},
+      "isBackground": true,
+      "windows": {"command": "${workspaceFolder}/src/charts_agent/.venv/Scripts/python.exe"},
+      "problemMatcher": {
+        "owner": "charts",
+        "pattern": {"regexp": "^(ERROR):(.*)$", "severity": 1, "message": 2},
+        "background": {"activeOnStart": true, "beginsPattern": ".*", "endsPattern": "Running on http"}
+      }
+    },
+    {
+      "label": "Run chart agent with debugger",
+      "type": "shell",
+      "command": "${workspaceFolder}/src/charts_agent/.venv/bin/python",
+      "args": ["-m", "debugpy", "--listen", "127.0.0.1:5679", "main.py"],
+      "options": {"cwd": "${workspaceFolder}/src/charts_agent", "env": {"PORT": "8188"}},
+      "windows": {"command": "${workspaceFolder}/src/charts_agent/.venv/Scripts/python.exe"},
+      "dependsOn": ["Validate prerequisites"],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "charts",
+        "pattern": {"regexp": "^(ERROR):(.*)$", "severity": 1, "message": 2},
+        "background": {"activeOnStart": true, "beginsPattern": ".*", "endsPattern": "Running on http"}
+      }
+    },
+    {
+      "label": "Open Agent Inspector",
+      "type": "shell",
+      "command": "echo '${input:openAgentInspector}'",
+      "dependsOn": ["Run chart agent with debugger"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Run chart web and MCP gateway",
+      "type": "shell",
+      "command": "${workspaceFolder}/src/charts_agent/.venv/bin/python",
+      "args": ["-m", "gateway.main"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {"PYTHONPATH": "${workspaceFolder}/src/charts_agent", "CHARTS_DEV_MODE": "true"}
+      },
+      "windows": {"command": "${workspaceFolder}/src/charts_agent/.venv/Scripts/python.exe"},
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "openAgentInspector",
+      "type": "command",
+      "command": "ai-mlstudio.openTestTool",
+      "args": {"triggeredFrom": "tasks", "port": 8188}
+    }
+  ]
+}

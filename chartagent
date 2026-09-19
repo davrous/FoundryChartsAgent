@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+AGENT="$ROOT/src/charts_agent"
+PY="$AGENT/.venv/bin/python"
+PORT="${PORT:-8188}"
+cd "$ROOT"
+
+die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+require_python() { [[ -x "$PY" ]] || die "Run ./chartagent setup first."; }
+verb="${1:-help}"
+[[ $# -eq 0 ]] || shift
+case "$verb" in
+    setup)
+        command -v python3 >/dev/null || die "Install Python 3.13 first."
+        [[ -x "$PY" ]] || python3 -m venv "$AGENT/.venv"
+        "$PY" -m pip install -r requirements.lock
+        npm --prefix web ci
+        npm --prefix web run build
+        ;;
+    dev)
+        require_python
+        cd "$AGENT"
+        export PORT
+        export ARTIFACT_BASE_URL="${ARTIFACT_BASE_URL:-http://localhost:$PORT/artifacts}"
+        exec "$PY" main.py "$@"
+        ;;
+    web)
+        require_python
+        export PYTHONPATH="$AGENT"
+        exec "$PY" -m gateway.main "$@"
+        ;;
+    playground)
+        command -v agentsplayground >/dev/null || die "Install Microsoft 365 Agents Playground first."
+        curl -fsS --max-time 3 "http://localhost:$PORT/health" >/dev/null ||
+            die "Run ./chartagent dev (or start) first."
+        exec agentsplayground -e "http://localhost:$PORT/api/messages" \
+            --service-url "${PLAYGROUND_SERVICE_URL:-http://localhost:56150/_connector}" "$@"
+        ;;
+    rebuild)
+        exec docker build --platform linux/amd64 -t foundry-charts-agent "$@" "$AGENT"
+        ;;
+    start)
+        [[ -f "$AGENT/.env" ]] || die "Copy src/charts_agent/.env.example to .env and configure it."
+        # Local containers need explicit Azure credentials; host az CLI tokens are not copied into the image.
+        exec docker run --rm -it -p "127.0.0.1:$PORT:8088" --env-file "$AGENT/.env" \
+            -e "ARTIFACT_BASE_URL=http://localhost:$PORT/artifacts" "$@" foundry-charts-agent
+        ;;
+    up)
+        "$ROOT/chartagent" rebuild
+        exec "$ROOT/chartagent" start "$@"
+        ;;
+    test)
+        require_python
+        exec "$PY" -m pytest "$@"
+        ;;
+    help|-h|--help)
+        printf '%s\n' \
+            'chartagent setup              Install declared Python/web dependencies and build both UIs' \
+            'chartagent dev                Run native hosted agent on localhost:8188 (az login credentials)' \
+            'chartagent web                Run web chat and MCP gateway on localhost:8190' \
+            'chartagent playground         Connect M365 Agents Playground to the running agent' \
+            'chartagent rebuild|start|up    Build/run optional container (explicit Azure credentials required)' \
+            'chartagent test               Run tests; accepts pytest selectors' \
+            'For container Playground: PLAYGROUND_SERVICE_URL=http://host.docker.internal:56150/_connector'
+        ;;
+    *) die "Unknown command: $verb. Use ./chartagent help." ;;
+esac

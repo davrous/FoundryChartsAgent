@@ -4,18 +4,28 @@ This project is a **Microsoft Foundry hosted agent** — a containerized AI agen
 
 ## Key files
 
-- `Dockerfile` — container definition
+- `src/charts_agent/` — Python hosted agent, mock API, shared rendering and protocol adapters
+- `src/charts_agent/Dockerfile` — optional container definition
+- `gateway/` — separate web/MCP gateway to the hosted agent
+- `web/` — shared interactive SVG renderer, web chat and MCP Apps widget
+- `tests/` — deterministic tests (no live model required)
 
 ## Development workflow
 
 The **Azure Developer CLI (`azd`)** manages the full lifecycle:
 
 ```bash
-azd ai agent run                           # Run locally on http://localhost:8088
-azd ai agent invoke --local "your message" # Test the local agent
-azd deploy                                 # Deploy to Foundry
-azd ai agent invoke "your message"         # Invoke the deployed agent
+./chartagent setup
+./chartagent dev
+./chartagent web
+./chartagent playground
+./chartagent test
 ```
+
+Use ports 8188 (agent) and 8190 (gateway) to avoid the Blender sample's 8088.
+Read README.md before a deployment: local artifacts and anonymous gateway
+mode are development-only. Never provision, deploy, or change Azure resources
+without the user's approval. Do not add a Teams tab.
 
 ## Microsoft Foundry Skill
 

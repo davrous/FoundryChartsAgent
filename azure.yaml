@@ -1,49 +1,56 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
 
 requiredVersions:
-  azd: '>=1.27.1'
-  extensions:
-    azure.ai.agents: '>=1.0.0-beta.9'
-name: agent-framework-agent-with-local-tools-responses
+    azd: '>=1.27.1'
+    extensions:
+        azure.ai.agents: '>=1.0.0-beta.9'
+name: foundry-charts-agent
 services:
-  ai-project:
-    host: azure.ai.project
-    deployments:
-      - name: gpt-5.4-mini
-        model:
-          format: OpenAI
-          name: gpt-5.4-mini
-          version: '2026-03-17'
-        sku:
-          name: GlobalStandard
-          capacity: 10
-  agent-framework-agent-with-local-tools-responses:
-    host: azure.ai.agent
-    metadata:
-      tags:
-        - Agent Framework
-        - AI Agent Hosting
-        - Azure AI AgentServer
-        - Responses Protocol
-        - Streaming
-    project: src/agent-framework-agent-with-local-tools-responses
-    language: python
-    codeConfiguration:
-      runtime: python_3_13
-      entryPoint: main.py
-    uses:
-      - ai-project
-    kind: hosted
-    name: agent-framework-agent-with-local-tools-responses
-    description: An Agent Framework agent with local tools hosted by Foundry.
-    protocols:
-      - protocol: responses
-        version: 2.0.0
-    env:
-      AZURE_AI_MODEL_DEPLOYMENT_NAME: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
-    container:
-      resources:
-        cpu: '0.5'
-        memory: 1Gi
+    charts-agent:
+        project: src/charts_agent
+        host: azure.ai.agent
+        language: python
+        uses:
+            - ai-project
+        environmentVariables:
+            - name: FOUNDRY_PROJECT_ENDPOINT
+              value: ${FOUNDRY_PROJECT_ENDPOINT}
+            - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+              value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+            - name: ARTIFACT_MODE
+              value: ${ARTIFACT_MODE}
+            - name: CHARTS_DEV_MODE
+              value: ${CHARTS_DEV_MODE}
+            - name: AZURE_STORAGE_ACCOUNT_URL
+              value: ${AZURE_STORAGE_ACCOUNT_URL}
+            - name: AZURE_STORAGE_CONTAINER
+              value: ${AZURE_STORAGE_CONTAINER}
+        codeConfiguration:
+            dependencyResolution: remote_build
+            entryPoint: main.py
+            runtime: python_3_13
+        container:
+            resources:
+                cpu: "1"
+                memory: 2Gi
+        description: Channel-adaptive charts from a deterministic mock sales database.
+        kind: hosted
+        metadata:
+            tags:
+                - Agent Framework
+                - AI Agent Hosting
+                - Azure AI AgentServer
+                - Responses Protocol
+                - Streaming
+        name: charts-agent
+        protocols:
+            - protocol: responses
+              version: 2.0.0
+            - protocol: activity
+              version: 2.0.0
+    ai-project:
+        host: azure.ai.project
+        deployments: []
+        endpoint: https://davrousfoundry.services.ai.azure.com/api/projects/proj-dav
 infra:
-  provider: microsoft.foundry
+    provider: microsoft.foundry

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "Foundry Charts",
+  "namespace": "FoundryCharts",
+  "description_for_human": "Explore synthetic sales with interactive charts from a Foundry hosted analyst.",
+  "description_for_model": "Retrieve sales analysis and interactive charts from the hosted agent. Use get_chart for natural-language requests and drill_chart for a complete structured ChartRequest. The gateway only forwards requests; the hosted agent generates all charts.",
+  "functions": [
+    {"name": "get_chart", "description": "Ask the hosted sales analyst to query data and return charts."},
+    {"name": "drill_chart", "description": "Ask the hosted analyst to render a structured ChartRequest."}
+  ],
+  "runtimes": [
+    {
+      "type": "RemoteMCPServer",
+      "auth": {
+        "type": "OAuthPluginVault",
+        "reference_id": "${{COPILOT_OAUTH_REFERENCE_ID}}"
+      },
+      "spec": {
+        "url": "${{GATEWAY_PUBLIC_ORIGIN}}/mcp",
+        "mcp_tool_description": {"file": "mcp-tools.json"}
+      },
+      "run_for_functions": ["get_chart", "drill_chart"]
+    }
+  ]
+}
