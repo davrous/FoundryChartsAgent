@@ -45,6 +45,7 @@ The mock API is called through `httpx` even in local mode: an ASGI transport kee
 
 - One declarative grammar drives Python static rendering and browser SVG rendering.
 - `vl-convert-python` produces PNG/SVG without a browser, Node server, or generated executable Python.
+- Charts use the generic `sans-serif` family: `vl-convert` includes a Liberation Sans fallback for minimal hosted runtimes. Hard-coding a desktop font such as Arial can leave PNG titles, axes and legends blank even though the SVG displays text using browser font fallback.
 - The browser uses **Vega's expression interpreter**, not its default `new Function` expression compiler. This matters for the restrictive MCP Apps CSP, which does not allow `unsafe-eval`.
 - Native Adaptive Cards do not accept Vega or SVG. They receive a separate, small mapping from the **same validated request and aggregate rows**.
 - ECharts is an excellent alternative for highly bespoke charts, but its SVG server rendering adds a Node rendering runtime to this Python sample.
@@ -267,28 +268,73 @@ not bypass bearer-token validation to make an unauthenticated browser work.
 
 ## Deployment and storage
 
-The [azure.yaml](azure.yaml) binds to the existing Foundry project, has no model deployments to provision, and declares Responses and Activity. Do not run provisioning just to test locally.
+**Follow the [Foundry production deployment runbook](docs/deployment.md)** for
+first deployment and updates. It is the shared procedure for humans and coding
+agents, including exact environment setup, package inspection, scoped RBAC,
+fresh-session verification and troubleshooting.
 
-Before deployment:
+The [azure.yaml](azure.yaml) currently binds to the original author's existing
+Foundry project, has no model deployments to provision, and declares Responses
+and Activity. When targeting another project, update that project service
+endpoint and the production azd environment together. Do not provision just to
+test locally or silently deploy to the checked-in example target.
 
-1. Build and test the sample.
-2. Use an existing **private Blob container** for chart artifacts; configure the hosted environment with `ARTIFACT_MODE=blob`, `CHARTS_DEV_MODE=false`, `AZURE_STORAGE_ACCOUNT_URL` and `AZURE_STORAGE_CONTAINER`.
-3. Grant the hosted identity the required Blob write and user-delegation-key permissions (for example Storage Blob Data Contributor at storage-account scope).
-4. Configure `FOUNDRY_PROJECT_ENDPOINT` and the existing `AZURE_AI_MODEL_DEPLOYMENT_NAME`.
-5. Set the matching azd environment values before deploying (the service's `environmentVariables` forwards these settings):
+The critical sequence is:
 
-   ```bash
-   azd env set ARTIFACT_MODE blob
-   azd env set CHARTS_DEV_MODE false
-   azd env set AZURE_STORAGE_ACCOUNT_URL https://YOUR-ACCOUNT.blob.core.windows.net
-   azd env set AZURE_STORAGE_CONTAINER charts
-   ```
+1. Confirm the Azure target and use a **separate production azd environment**.
+   Preserve the local development `.env`; it is excluded from deployment.
+2. Configure Blob mode, disable dev mode, test the sample, and inspect the exact
+   ZIP against the service-root [.agentignore](src/charts_agent/.agentignore).
+   The Python 3.13 remote code build requires no local Docker/ACR build.
+3. Deploy `charts-agent` and read its actual version and
+   `instance_identity.principal_id`. The runtime identity is created during the
+   **first deployment**, so do not try to assign its roles beforehand.
+4. Before the first chart request, verify **Storage Blob Data Contributor** at
+   the chart-container scope and **Storage Blob Delegator** at the account scope
+   for that runtime identity, not the project managed identity. Allow RBAC
+   propagation; do not broaden access to work around an immediate failure.
+5. Verify `active` status and doctor checks, then invoke the new version over
+   Responses using **a new session and conversation**. Require actual PNG/SVG
+   links, download the images, and **view the PNG's title, axes and legend**.
+   HTTP 200 and a correct MIME type alone do not prove text rendered.
 
-6. Deploy via your usual Foundry/azd workflow. Deployment and the authenticated remote MCP service are separate operations. The hosted process rejects development/local-artifact settings in a detected Foundry environment.
+On 2026-09-19, version 2 in `charts-prod` passed these production image checks
+and all 11 applicable doctor checks. The font fix also passed 58 targeted chart
+tests and a fontless Linux rendering check. This is a dated baseline, not a
+hard-coded version to deploy or invoke; discover the current version each time.
 
-Blob images use read-only, HTTPS-only **user-delegation SAS** URLs with a default lifetime of 60 minutes. No storage account key or anonymous container is required. URLs will expire in old messages; storage retention/lifecycle rules and a refresh strategy are production decisions, not hidden guarantees in this sample. Set `ARTIFACT_TTL_MINUTES` within the documented sample range (1–1440). Local files persist under the ignored artifact directory and must be cleaned up when no longer needed.
+Deployment and the authenticated remote MCP service are separate operations. The hosted process rejects development/local-artifact settings in a detected Foundry environment.
+
+Activity deployment also creates an Azure Bot registration and generates [Teams setup instructions](src/charts_agent/TEAMS_APP_SETUP.md). App packaging, tenant approval and channel acceptance remain separate steps; this is a bot integration, **not a Teams tab**.
+
+Blob images use read-only, HTTPS-only **user-delegation SAS** URLs with a default lifetime of 60 minutes. No storage account key or anonymous container is required. URLs will expire in old messages; storage retention/lifecycle rules and a refresh strategy are production decisions, not hidden guarantees in this sample. `ARTIFACT_TTL_MINUTES` supports 1–1440 minutes, but a hosted override also requires adding it to the service's forwarded `environmentVariables`; setting a local `.env` or azd value alone is insufficient. Local files persist under the ignored artifact directory and must be cleaned up when no longer needed.
 
 In production local artifact mode fails closed. Localhost image URLs cannot be used by remote M365 clients. The source context also reports a Copilot image-display regression; this sample cannot fix client/platform regressions, so validate image fallback in the target tenant.
+
+Foundry Toolkit Agent Inspector accepts HTTPS Blob image URLs, but still protects
+remote images behind **Load Remote Images**. Blob storage does not remove that
+privacy prompt. Never publish the generated SAS query strings in logs or source.
+When copying an image URL, copy only that URL, preserve its percent encoding,
+and exclude Markdown delimiters/the separate SVG link. Redeployment does not
+repair previously generated PNGs; request a fresh chart for a new artifact URL.
+
+### Optional evaluation suite
+
+An instruction-generated 15-case suite is configured in
+[eval.yaml](src/charts_agent/eval.yaml), using the existing `gpt-5.4-mini` deployment.
+Its goals cover request/filter/drill-down adherence, grounding in synthetic data,
+and caller-appropriate output. Generation is separate from execution: the
+production deployment does not automatically run a paid evaluation.
+
+Both generation jobs completed. Review the
+[15 generated cases](src/charts_agent/.foundry/datasets/charts-agent-smoke-1.0/charts-agent-smoke_dg.jsonl)
+and [rubric](src/charts_agent/.foundry/evaluators/charts-agent-smoke-v1.json)
+before running
+`azd ai agent eval run --environment charts-prod` when ready. The CLI finalizes
+its generation configuration before execution. Generated `candidate_response`
+values are synthetic examples, not verified agent outputs or ground truth.
+Default Responses cases do not
+replace Activity/M365 acceptance tests or interactive metadata/browser tests.
 
 The Activity example uses bounded **in-memory conversation history**; Responses history uses the host's default storage. Neither is advertised as durable across container replacement. For real business data, add tenant/user authorization at the query layer, a durable scoped history store, audit/retention policies, quotas and gateway rate limits. Do not reuse demo format-selection metadata as an authorization mechanism.
 
@@ -315,8 +361,9 @@ The custom chat rendered a 36-cell heatmap with accurate hover details. Filterin
 to Europe reduced it to 12 cells with **zero network requests**. A real MCP client
 initialized the gateway, discovered the chart tools, read the self-contained
 widget resource with its MIME/CSP metadata, and successfully called `drill_chart`
-through the hosted agent. The Python regression suite currently has **86 passing
-tests**; the two warnings are upstream Starlette deprecations.
+through the hosted agent. Run the Python regressions with `./chartagent test`;
+the launcher uses the service-local virtual environment rather than an
+unrelated root `.venv` or global interpreter.
 
 All **6 JavaScript tests** and both UI builds also pass. The test-only MCP host
 harness verified the bundled widget under a restrictive CSP (including

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.29/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.29",
+  "version": "1.0.1",
+  "id": "72a62a0b-a047-4cc9-a3a9-114f4ef09596",
+  "developer": {
+    "name": "David Rousset",
+    "websiteUrl": "https://www.davrous.com",
+    "privacyUrl": "https://www.davrous.com",
+    "termsOfUseUrl": "https://www.davrous.com"
+  },
+  "name": {
+    "short": "charts-agent",
+    "full": "charts-agent"
+  },
+  "description": {
+    "short": "Foundry Charts Agent",
+    "full": "A Foundry agent that can render Charts in multiple ways based on the protocol used to call it"
+  },
+  "icons": {
+    "color": "default-color-icon.png",
+    "outline": "default-outline-icon.png"
+  },
+  "accentColor": "#4464ee",
+  "validDomains": [],
+  "webApplicationInfo": {
+    "id": "d7f0fada-a2db-4688-9503-00f434381bd9",
+    "resource": "api://example.com"
+  },
+  "bots": [
+    {
+      "botId": "d7f0fada-a2db-4688-9503-00f434381bd9",
+      "scopes": [
+        "personal",
+        "team",
+        "groupChat",
+        "copilot"
+      ],
+      "supportsFiles": true,
+      "isNotificationOnly": false
+    }
+  ],
+  "supportsChannelFeatures": "tier1",
+  "copilotAgents": {
+    "customEngineAgents": [
+      {
+        "id": "d7f0fada-a2db-4688-9503-00f434381bd9",
+        "type": "bot",
+        "disclaimer": {
+          "text": "This agent uses AI. Please verify important information."
+        }
+      }
+    ]
+  }
+}

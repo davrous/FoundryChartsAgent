@@ -2,9 +2,11 @@ import asyncio
 import json
 import sqlite3
 import struct
+import xml.etree.ElementTree as ET
 
 import httpx
 import pytest
+import vl_convert as vlc
 from starlette.testclient import TestClient
 
 from contracts import ChartRequest, ChartRow, QuerySpec
@@ -114,6 +116,9 @@ def test_every_chart_renders_same_embedded_spec_within_image_budgets(client, kin
     assert rendered.spec["data"]["values"] == original
     assert [row.model_dump() for row in rows] == original
     assert "<svg" in rendered.svg
+    text_elements = ET.fromstring(rendered.svg).findall(".//{http://www.w3.org/2000/svg}text")
+    assert text_elements
+    assert all(element.get("font-family") == "sans-serif" for element in text_elements)
     assert rendered.png.startswith(b"\x89PNG\r\n\x1a\n")
     width, height = struct.unpack(">II", rendered.png[16:24])
     assert width == 960 and height <= 1024
@@ -121,6 +126,20 @@ def test_every_chart_renders_same_embedded_spec_within_image_budgets(client, kin
     assert "tooltip" in json.dumps(rendered.spec)
     if kind == "scatter":
         assert rendered.spec["encoding"]["x"]["field"] == "units"
+
+
+@pytest.mark.parametrize("weight", ["normal", "bold"])
+def test_chart_font_rasterizes_text_without_requiring_arial(weight):
+    font = build_spec(ChartRequest(), [])["config"]["font"]
+    assert font == "sans-serif"
+    background = '<rect width="400" height="50" fill="white"/>'
+    text = (
+        f'<text x="8" y="30" font-family="{font}" font-size="20" font-weight="{weight}">'
+        "Revenue Europe 1,234.56</text>"
+    )
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="50">{}</svg>'
+    blank = vlc.svg_to_png(svg.format(background))
+    assert vlc.svg_to_png(svg.format(background + text)) != blank
 
 
 @pytest.mark.parametrize("kind,shape", [

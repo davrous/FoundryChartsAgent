@@ -1,0 +1,25 @@
+{
+  "connectionName": null,
+  "dataUri": "https://saidch7u7cjtaxe.blob.core.windows.net/davrousfou-780d6d52-dd26-5263-9384-582ae8acf294",
+  "description": "Dataset for eval data generation job: datagen-1a1d90d248f74418a18b41e15a328819",
+  "displayName": "charts-agent-smoke",
+  "id": "azureai://accounts/davrousfoundry/projects/proj-dav/data/charts-agent-smoke/versions/1.0",
+  "isReference": false,
+  "isSingleFile": true,
+  "lifecycle": null,
+  "name": "charts-agent-smoke",
+  "source": "Data",
+  "systemData": {
+    "createdAt": "2026-09-19T16:13:43.4517931+00:00",
+    "createdBy": "779301c0-18b2-4cdc-801b-a0a3368fee0a",
+    "createdByType": null,
+    "lastModifiedAt": "2026-09-19T16:13:43.4517931+00:00"
+  },
+  "tags": {
+    "data_generation_job_id": "datagen-1a1d90d248f74418a18b41e15a328819",
+    "data_generation_type": "simple_qna",
+    "scenario": "evaluation"
+  },
+  "type": "uri_file",
+  "version": "1.0"
+}

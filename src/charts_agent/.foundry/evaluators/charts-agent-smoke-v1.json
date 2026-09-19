@@ -1,0 +1,135 @@
+{
+  "categories": [
+    "quality",
+    "agents"
+  ],
+  "created_at": "2026-09-19T16:11:01.5288081+00:00",
+  "created_by": "David Rousset",
+  "definition": {
+    "data_schema": {
+      "properties": {
+        "messages": {
+          "description": "Conversation messages (conversation mode)",
+          "type": "array"
+        },
+        "query": {
+          "description": "User query (turn mode)",
+          "type": "string"
+        },
+        "response": {
+          "description": "Agent response (turn mode)",
+          "type": "string"
+        },
+        "tool_definitions": {
+          "description": "Tool definitions available to the agent",
+          "type": "array"
+        }
+      },
+      "required": [],
+      "type": "object"
+    },
+    "dimensions": [
+      {
+        "always_applicable": false,
+        "description": "The agent fulfills the requested charting task correctly by using a supported chart type when the request is valid, and by explaining or rejecting invalid or unsupported requests instead of silently substituting a different chart.",
+        "id": "task_success",
+        "weight": 10
+      },
+      {
+        "always_applicable": false,
+        "description": "The agent first calls `get_data_schema` before using data to produce any chart or drill-down output.",
+        "id": "schema_discovery_before_charting",
+        "weight": 5
+      },
+      {
+        "always_applicable": false,
+        "description": "The agent issues no more than three chart actions in a single turn.",
+        "id": "chart_action_limit",
+        "weight": 3
+      },
+      {
+        "always_applicable": false,
+        "description": "In follow-up turns, the agent preserves previously established filters and scope unless the user explicitly changes them.",
+        "id": "filter_preservation_across_followups",
+        "weight": 6
+      },
+      {
+        "always_applicable": false,
+        "description": "When the user requests a drill-down, the agent refines the analysis along a coherent analytic path rather than restarting from an unrelated scope.",
+        "id": "drilldown_progression_coherence",
+        "weight": 4
+      },
+      {
+        "always_applicable": false,
+        "description": "All reported labels, totals, dates, and segment names come from tool output, and any dates or ranges used stay within 2025.",
+        "id": "tool_grounded_2025_reporting",
+        "weight": 6
+      },
+      {
+        "always_applicable": false,
+        "description": "The final output format matches the caller context: static PNG Markdown plus SVG download by default, interactive ChartBundle for application metadata, and Adaptive Cards for supported Activity cases with PNG fallback for area, scatter, and heatmap.",
+        "id": "caller_specific_rendering",
+        "weight": 5
+      },
+      {
+        "always_applicable": true,
+        "description": "Other important quality factors not covered by listed criteria.",
+        "id": "general_quality",
+        "weight": 5
+      }
+    ],
+    "init_parameters": {
+      "properties": {
+        "model": {
+          "description": "Model deployment name for the LLM judge",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "charts-agent-smoke": {
+        "desirable_direction": "increase",
+        "is_primary": true,
+        "max_value": 1,
+        "min_value": 0,
+        "type": "continuous"
+      }
+    },
+    "pass_threshold": 0.5,
+    "prompt_text": "",
+    "type": "rubric"
+  },
+  "description": "",
+  "display_name": "charts-agent-smoke",
+  "evaluator_type": "custom",
+  "generation_artifacts": {
+    "dataset": {
+      "name": "sys-evalartifacts-charts-agent-smoke",
+      "version": "v1-6cd3d294"
+    },
+    "kinds": [
+      "spec"
+    ]
+  },
+  "generation_job_id": "evaluatorgen-charts-agent-smoke-v1-6cd3d294",
+  "id": "azureai://accounts/davrousfoundry/projects/proj-dav/evaluators/charts-agent-smoke/versions/1",
+  "metadata": {
+    "generation_agent_source": "charts-agent",
+    "generation_job_id": "evaluatorgen-charts-agent-smoke-v1-6cd3d294",
+    "generation_status": "succeeded"
+  },
+  "modified_at": "2026-09-19T16:11:23.1003975+00:00",
+  "name": "charts-agent-smoke",
+  "supported_evaluation_levels": [
+    "turn",
+    "conversation"
+  ],
+  "version": "1",
+  "warnings": [
+    "input_quality"
+  ]
+}

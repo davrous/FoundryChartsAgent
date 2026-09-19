@@ -82,7 +82,8 @@ def build_spec(request: ChartRequest, rows: list[ChartRow]) -> dict[str, Any]:
         "title": {"text": request.title, "anchor": "start", "fontSize": 20},
         "data": {"name": "table", "values": values},
         "config": {
-            "font": "Arial",
+            # vl-convert bundles a sans-serif fallback even in fontless hosted runtimes.
+            "font": "sans-serif",
             "view": {"stroke": None},
             "axis": {"labelFontSize": 12, "titleFontSize": 13, "labelLimit": 150},
             "legend": {"orient": "bottom", "labelLimit": 200, "columns": 4},

@@ -1,0 +1,8 @@
+name: charts-agent-smoke
+agent:
+    name: charts-agent
+    kind: hosted
+    config: .agent_configs/baseline/metadata.yaml
+options:
+    eval_model: gpt-5.4-mini
+max_samples: 15
