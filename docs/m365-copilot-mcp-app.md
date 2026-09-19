@@ -2,24 +2,31 @@
 
 [Back to the main README](../README.md#copilot-integration)
 
-For the current deployment blocker, Teams/Copilot rendering observations and
-proposed scaling/session-isolation design, see the
-[engineering issues handoff](../CopilotMCPAPPIssues.md). It distinguishes
-verified behavior from open hypotheses; the production MCP App flow remains
-unverified and deployment is paused at tenant application onboarding.
+The production MCP App flow remains unverified and deployment is paused at
+tenant application onboarding. See the
+[gateway provisioning runbook](../infra/gateway/README.md) for prerequisites
+and the deployment sequence.
 
 ## Where do I get the production MCP Server URL?
 
-**Not from the Foundry hosted-agent deployment.** The deployment completed in
-this sample publishes Responses and Activity endpoints. The MCP server is
+**For this sample's current deployment, use the separate gateway.** The
+deployment completed here publishes Responses and Activity endpoints. Its MCP server is
 [gateway/main.py](../gateway/main.py), a **separate service**. The local address
 `http://127.0.0.1:8190/mcp` works with Claude Desktop on your computer, but
 Microsoft 365 Copilot cannot reach that address.
 
-You must host the gateway at a reachable HTTPS origin. Its MCP Server URL is
+For this implementation, host the gateway at a reachable HTTPS origin. Its MCP Server URL is
 **that origin plus `/mcp`**. Step 3 below retrieves the actual Azure-assigned
 hostname rather than guessing one. No production gateway was deployed by the
 Foundry deployment described in this repository.
+
+**Native Foundry alternative to investigate:** current
+[Foundry documentation](https://learn.microsoft.com/azure/foundry/agents/how-to/configure-agent#protocols)
+also lists an agent-native MCP endpoint in preview. This is not yet enabled
+or tested here, and custom MCP Apps tool metadata / HTML-resource support has
+not been established. Confirm those capabilities before assuming a separately
+hosted gateway is an unavoidable platform requirement.
+The steps below remain the implemented separate-gateway path.
 
 ```text
 M365 Copilot chat

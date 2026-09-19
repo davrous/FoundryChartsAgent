@@ -80,8 +80,11 @@ the Blob container public or change SAS permissions or expiry.
 
 Microsoft documents this allowlist requirement for images returned by
 [API plugins and declarative agents](https://learn.microsoft.com/microsoft-365/copilot/extensibility/api-plugin-adaptive-cards#add-domains-to-your-app-manifest).
-We are testing whether it also resolves the image failure on this
-Activity/custom-engine path; **the Copilot rendering result is still pending**.
+**Retest result (2026-09-19):** the developer reports that the image still does
+not display in M365 Copilot after this change. The allowlist update alone did
+not resolve the reported Activity/custom-engine issue. The installed package
+and client network diagnostics have not been independently inspected.
+The steps below remain useful for collecting a controlled reproduction.
 
 1. Regenerate the package using the commands above, then upload
    [build/foundry-charts.zip](build/foundry-charts.zip) through the same custom
@@ -100,5 +103,4 @@ Activity/custom-engine path; **the Copilot rendering result is still pending**.
    PNG URL works directly, but do not share its SAS query in logs or issues.
 
 No hosted-agent redeployment, new app registration or MCP gateway deployment
-is required for this manifest-only test. Track the outcome under C-01 in the
-[engineering issues report](../CopilotMCPAPPIssues.md).
+is required for this manifest-only test.

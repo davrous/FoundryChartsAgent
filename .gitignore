@@ -1,5 +1,6 @@
 .azure
 .copilot-azure/
+/CopilotMCPAPPIssues.md
 .env
 **/.env
 .venv/
