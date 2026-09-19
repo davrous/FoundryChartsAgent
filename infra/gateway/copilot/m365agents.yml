@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://aka.ms/m365-agents-toolkits/v1.11/yaml.schema.json
+version: v1.11
+environmentFolderPath: ./env
+
+provision:
+  - uses: teamsApp/create
+    with:
+      name: Foundry Charts Interactive
+    writeToEnvironmentFile:
+      teamsAppId: COPILOT_APP_ID
+
+  - uses: oauth/register
+    with:
+      name: Foundry Charts MCP
+      appId: ${{COPILOT_APP_ID}}
+      applicableToApps: AnyApp
+      targetAudience: HomeTenant
+      identityProvider: Custom
+      flow: authorizationCode
+      isPKCEEnabled: true
+      tokenExchangeMethodType: PostRequestBody
+      clientId: ${{COPILOT_OAUTH_CLIENT_ID}}
+      clientSecret: ${{SECRET_COPILOT_OAUTH_CLIENT_SECRET}}
+      baseUrl: ${{GATEWAY_PUBLIC_ORIGIN}}/mcp
+      authorizationUrl: https://login.microsoftonline.com/${{ENTRA_TENANT_ID}}/oauth2/v2.0/authorize
+      tokenUrl: https://login.microsoftonline.com/${{ENTRA_TENANT_ID}}/oauth2/v2.0/token
+      refreshUrl: https://login.microsoftonline.com/${{ENTRA_TENANT_ID}}/oauth2/v2.0/token
+      scope: api://${{GATEWAY_API_CLIENT_ID}}/Charts.Read,offline_access
+    writeToEnvironmentFile:
+      configurationId: COPILOT_OAUTH_REFERENCE_ID
+
+  - uses: teamsApp/validateManifest
+    with:
+      manifestPath: ./appPackage/manifest.json
+
+  - uses: teamsApp/zipAppPackage
+    with:
+      manifestPath: ./appPackage/manifest.json
+      outputZipPath: ./appPackage/build/foundry-charts-interactive.zip
+      outputFolder: ./appPackage/build
+
+  - uses: teamsApp/validateAppPackage
+    with:
+      appPackagePath: ./appPackage/build/foundry-charts-interactive.zip
+
+  - uses: teamsApp/update
+    with:
+      appPackagePath: ./appPackage/build/foundry-charts-interactive.zip

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environmentName": {
+      "value": "chartsmcp-prod-7c90"
+    },
+    "location": {
+      "value": "northcentralus"
+    },
+    "sessionId": {
+      "value": "7c9091c0-587c-4c6f-9429-a161a4e6a5c8"
+    },
+    "deployedBy": {
+      "value": "David Rousset"
+    },
+    "createdAt": {
+      "value": "2026-09-19T21:06:49.388+02:00"
+    },
+    "deployerObjectId": {
+      "value": "10a58b30-f151-4d74-89eb-3b3933014858"
+    },
+    "resourceGroupName": {
+      "value": "davrousai-rg"
+    },
+    "appServicePlanName": {
+      "value": "asp-chartsmcp-prod-7c90"
+    },
+    "appServiceName": {
+      "value": "app-chartsmcp-prod-7c90"
+    },
+    "appInsightsName": {
+      "value": "appi-chartsmcp-prod-7c90"
+    },
+    "keyVaultName": {
+      "value": "kv-chartsmcp-prod-7c90"
+    },
+    "existingLogAnalyticsWorkspaceId": {
+      "value": "/subscriptions/480af19d-6138-460b-962c-e2a0b5aca925/resourceGroups/davrousai-rg/providers/Microsoft.OperationalInsights/workspaces/la-foundry-yqmdrsmng3v64"
+    },
+    "mcpOrigins": {
+      "value": ""
+    }
+  }
+}

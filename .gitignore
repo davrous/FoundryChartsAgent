@@ -1,4 +1,5 @@
 .azure
+.copilot-azure/
 .env
 **/.env
 .venv/

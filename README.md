@@ -214,6 +214,10 @@ To use the same MCP App in Microsoft 365 Copilot with the deployed Foundry agent
 follow the [production gateway and Copilot walkthrough](docs/m365-copilot-mcp-app.md),
 including how to obtain the real MCP Server URL.
 
+See [Copilot MCP App issues and engineering handoff](CopilotMCPAPPIssues.md)
+for the current identity-onboarding blocker, Teams/Copilot rendering gaps and
+proposed scaling, user-isolation and conversation-routing improvements.
+
 The UI bundles its dependencies, uses SVG, and shares its rendering component between chat and the MCP widget. Local filters act on the returned aggregate rows without a model or API call; drill-down performs a new query through the hosted agent. Local filters therefore do not recover raw records that were never returned.
 
 ### Interactive SVG in the custom web chat

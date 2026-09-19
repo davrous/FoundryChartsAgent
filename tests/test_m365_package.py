@@ -19,6 +19,11 @@ from m365sideloadmanifest.build_package import (
 ROOT = Path(__file__).resolve().parents[1] / "m365sideloadmanifest"
 
 
+def test_manifest_allows_only_the_production_chart_artifact_host():
+    manifest = json.loads((ROOT / "manifest.json").read_bytes())
+    assert manifest["validDomains"] == ["msdavrous.blob.core.windows.net"]
+
+
 @pytest.mark.parametrize("filter_type", range(5))
 def test_decode_all_png_filters(filter_type):
     width, height = 3, 2
@@ -103,6 +108,7 @@ def test_package_contains_only_manifest_and_matching_icons(tmp_path):
         assert set(package.namelist()) == {
             "manifest.json", "default-color-icon.png", "default-outline-icon.png",
         }
+        assert package.read("manifest.json") == (ROOT / "manifest.json").read_bytes()
         manifest = json.loads(package.read("manifest.json"))
         for filename in manifest["icons"].values():
             assert package.read(filename) == (ROOT / filename).read_bytes()

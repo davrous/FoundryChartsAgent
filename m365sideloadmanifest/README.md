@@ -69,3 +69,36 @@ confirm the actual registered Application ID URI before relying on SSO.
 The supplied privacy and terms URLs both point to the publisher's homepage;
 use real policy pages before a store submission. Do not invent identity or
 policy URLs to make a validator appear successful.
+
+## Retest Copilot chart images with version 1.0.4
+
+The [manifest](manifest.json) now allows the deployed chart artifact hostname,
+`msdavrous.blob.core.windows.net`, in `validDomains`. Only this exact hostname
+is included: no wildcard, scheme, path or SAS query. Keep it aligned with the
+artifact storage host if you deploy to another account. This does not make
+the Blob container public or change SAS permissions or expiry.
+
+Microsoft documents this allowlist requirement for images returned by
+[API plugins and declarative agents](https://learn.microsoft.com/microsoft-365/copilot/extensibility/api-plugin-adaptive-cards#add-domains-to-your-app-manifest).
+We are testing whether it also resolves the image failure on this
+Activity/custom-engine path; **the Copilot rendering result is still pending**.
+
+1. Regenerate the package using the commands above, then upload
+   [build/foundry-charts.zip](build/foundry-charts.zip) through the same custom
+   app upload flow used for the existing agent. Update the existing app when
+   offered; its app/bot IDs are unchanged.
+2. Confirm the installed package is **1.0.4**, then refresh/reopen Copilot.
+   A local manifest edit does not update an already installed package.
+3. Start a new agent conversation and ask:
+   **"Show a heatmap of 2025 revenue by month and region."**
+   Heatmaps deliberately use a PNG image rather than a native chart control,
+   so this isolates the image path from native-chart compatibility.
+4. Check the fresh response in Copilot and Teams. Do not reuse an old chart
+   message or SAS URL: old links can have expired.
+5. If Copilot still shows no image, record its client/build and package
+   version, a screenshot and sanitized diagnostics. Confirm that the fresh
+   PNG URL works directly, but do not share its SAS query in logs or issues.
+
+No hosted-agent redeployment, new app registration or MCP gateway deployment
+is required for this manifest-only test. Track the outcome under C-01 in the
+[engineering issues report](../CopilotMCPAPPIssues.md).

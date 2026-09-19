@@ -11,6 +11,8 @@ This project is a **Microsoft Foundry hosted agent** — a containerized AI agen
 - `src/charts_agent/.agentignore` — source ZIP exclusions; `.gitignore` is not a substitute
 - `src/charts_agent/Dockerfile` — optional container definition
 - `gateway/` — separate web/MCP gateway to the hosted agent
+- `infra/gateway/README.md` — independent gateway infrastructure, Entra/OAuth provisioning and M365 wrapper runbook
+- `docs/m365-copilot-mcp-app.md` — Copilot MCP App integration and tenant acceptance steps
 - `web/` — shared interactive SVG renderer, web chat and MCP Apps widget
 - `tests/` — deterministic tests (no live model required)
 
@@ -93,6 +95,31 @@ Record version, validation results and any limitations without credentials.
 The runbook's dated baseline is historical evidence, not live configuration.
 An environment named production does not make the sample's synthetic data or
 in-memory history suitable for real customer data without further work.
+
+### Independent production MCP gateway
+
+Use [the gateway runbook](infra/gateway/README.md), not `azd deploy`, for this
+separate App Service deployment. The existing hosted agent already supports
+interactive output; do not redeploy it just to expose `/mcp`.
+
+- Preserve existing Foundry/Activity/local configuration. Obtain deployment
+  approval separately from scaffolding; verify B1 quota before paid hosting.
+- Compile the Bicep and run `node infra/gateway/validate.mjs`, then inspect
+  what-if with the actual Entra API client ID. Never fill missing IDs with
+  placeholders or weaken production authentication.
+- Use the gateway's own managed identity with project-scoped Foundry Agent
+  Consumer. The gateway needs neither Blob access nor the OAuth client secret.
+- Deploy only the helper's eight-file ZIP using Entra-authenticated
+  `az webapp deploy --type zip`; keep SCM/FTP basic auth disabled.
+- Discover the actual hostname and exact widget origin. Configure settings
+  through Bicep, retaining the origin on redeploy.
+- Keep OAuth secrets only in the dedicated vault and M365 token store. The
+  identifier-only local state is private and ignored. Rotate credentials
+  explicitly; update the existing token-store registration before revoking
+  old credentials.
+- Verify authenticated tools, UI resource, a real chart, and drill-down.
+  Azure health, M365 registration, installation and inline rendering are
+  distinct acceptance steps; report any unverified step accurately.
 
 ## Microsoft Foundry Skill
 

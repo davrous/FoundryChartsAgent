@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.29/MicrosoftTeams.schema.json",
   "manifestVersion": "1.29",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "id": "72a62a0b-a047-4cc9-a3a9-114f4ef09596",
   "developer": {
     "name": "David Rousset",
@@ -22,7 +22,9 @@
     "outline": "default-outline-icon.png"
   },
   "accentColor": "#2735A6",
-  "validDomains": [],
+  "validDomains": [
+    "msdavrous.blob.core.windows.net"
+  ],
   "webApplicationInfo": {
     "id": "d7f0fada-a2db-4688-9503-00f434381bd9",
     "resource": "api://example.com"

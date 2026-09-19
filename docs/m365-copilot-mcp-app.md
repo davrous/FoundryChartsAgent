@@ -2,6 +2,12 @@
 
 [Back to the main README](../README.md#copilot-integration)
 
+For the current deployment blocker, Teams/Copilot rendering observations and
+proposed scaling/session-isolation design, see the
+[engineering issues handoff](../CopilotMCPAPPIssues.md). It distinguishes
+verified behavior from open hypotheses; the production MCP App flow remains
+unverified and deployment is paused at tenant application onboarding.
+
 ## Where do I get the production MCP Server URL?
 
 **Not from the Foundry hosted-agent deployment.** The deployment completed in
@@ -42,6 +48,15 @@ The following walkthrough uses **Linux Azure App Service with Python 3.13**
 as one concrete gateway hosting option. Other HTTPS hosts can implement the
 same contract. These are instructions, not a claim that the gateway or M365
 tenant integration has already been deployed or verified.
+
+### Reproducible provisioning
+
+The [production gateway infrastructure and helpers](../infra/gateway/README.md)
+provide a pinned-AVM Bicep deployment, an allowlisted source ZIP, resumable Entra
+registrations, secret-to-Key-Vault provisioning and a separate M365 Toolkit
+project. Use that runbook for automated provisioning; the sections below
+explain the protocol, identity and tenant-side configuration in detail.
+Scaffolding these files does not create cloud resources or authorize deployment.
 
 ## 1. Check prerequisites and approve the new hosting
 

@@ -1,0 +1,6 @@
+.state/
+copilot/env/
+copilot/appPackage/build/
+copilot/.localConfigs
+copilot/.env*
+copilot/appPackage/*.zip
