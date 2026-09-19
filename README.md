@@ -112,6 +112,19 @@ Custom clients explicitly send `metadata.chart_output = "interactive"`. The gate
 
 Caller metadata selects **presentation only**, never permissions.
 
+#### Static output outside the Activity experience
+
+For `"Show revenue by region as a bar chart."`, an ordinary Responses caller
+receives the PNG below, even though this chart also has a native Adaptive Card
+equivalent. The SVG download is a scalable artifact, not the interactive chat
+component. The custom web/MCP clients explicitly opt into interactive output.
+
+![Static Responses output: revenue bars for Americas, Asia Pacific and Europe, without interactive controls](docs/screenshots/responses-static-chart.png)
+
+*Actual 960 x 540 PNG returned by the default Responses call. A copy is stored
+with this README so the example does not depend on a running localhost server
+or an expiring artifact URL.*
+
 ## Microsoft 365 Agents Playground
 
 Install [Microsoft 365 Agents Playground](https://learn.microsoft.com/microsoft-365/agents-sdk/test-with-toolkit-project) and keep `./chartagent dev` running:
@@ -132,6 +145,22 @@ The endpoint is still `http://localhost:8188/api/messages`. Do not change the na
 
 Use `/clear` to clear Activity conversation history. Chart cards include drill-down `Action.Submit` actions where the current grouping permits them. Typing activities keep longer requests alive; turns have a bounded timeout and report failures.
 
+### Native chart and card-button drill-down
+
+Ask **"Show revenue by region as a bar chart."** The Activity response uses a
+native `Chart.VerticalBar`, an accessible data preview, and **Explore** buttons:
+
+![M365 Agents Playground showing a native revenue-by-region Adaptive Card with Explore Americas, Explore Asia Pacific and Explore Europe buttons](docs/screenshots/playground-native-chart.png)
+
+Choose **Explore Europe**. The card's `Action.Submit` sends a new query through
+the agent and returns France and Germany, totaling **9,044,376.91**:
+
+![Detail of the native Playground drill-down card showing France and Germany within Europe](docs/screenshots/playground-europe-drilldown.png)
+
+*Live local captures from Playground 0.2.27. The overview uses a 1280 x 980
+desktop viewport at 2x pixel density; the detail is cropped for legibility.
+Open any screenshot at full size to inspect its labels.*
+
 ### Adaptive Card support is host-specific
 
 The mapper targets these eight Microsoft controls:
@@ -151,6 +180,18 @@ Area, scatter and heatmap charts use static fallback. Additional semantic and sa
 
 **Adaptive Card v1.5 does not guarantee chart support.** The Microsoft chart controls are host extensions; generic card-schema validation alone cannot verify them. Playground may show the image fallback instead of a native chart, depending on its renderer. Verify final rendering in the intended Teams/Copilot client. This is deliberately not a claim that MCP Apps works over Activity.
 
+#### Unsupported native chart: automatic image fallback
+
+Ask **"Show a heatmap of revenue by month and region for all regions."** There is
+no equivalent native Adaptive Card heatmap control, so the Activity response
+contains an image card with the shared PNG and an explicit fallback explanation:
+
+![Playground image-card detail showing the monthly regional revenue heatmap and the explanation that no equivalent native Adaptive Card chart exists](docs/screenshots/playground-image-fallback.png)
+
+*The chart and explanation are shown here; the card also includes a data
+preview below this crop. This PNG has no client-side hover or filters.
+Compare it with the interactive rendering of the same heatmap below.*
+
 ## Web chat and MCP Apps
 
 The gateway supports two independent upstream modes:
@@ -163,6 +204,53 @@ See [gateway configuration](gateway/.env.example) for the exact variables. For a
 Connect an MCP Apps-capable client to **http://localhost:8190/mcp** for local testing. `get_chart` and `drill_chart` reference `ui://charts/app.html`; the resource is served with `text/html;profile=mcp-app` and resource-level CSP metadata. Hosts without Apps support still receive useful text/structured tool results.
 
 The UI bundles its dependencies, uses SVG, and shares its rendering component between chat and the MCP widget. Local filters act on the returned aggregate rows without a model or API call; drill-down performs a new query through the hosted agent. Local filters therefore do not recover raw records that were never returned.
+
+### Interactive SVG in the custom web chat
+
+Ask **"Show revenue by region split by channel as a grouped bar chart."**
+Hovering over a mark shows its region, channel, revenue and units. The same
+component exposes filters, an SVG download, and a drill-down selector:
+
+![Custom web chat with an interactive grouped SVG chart, a Europe Retail hover tooltip, and Europe selected for country drill-down](docs/screenshots/web-interactive-overview.png)
+
+*Captured at 1440 x 1360 so the question, complete chart, tooltip and drill
+controls remain visible together. The following screenshots focus on the chart
+component, at approximately 1046 x 894 pixels.*
+
+#### Drill-down queries new data
+
+Select **Europe** under **Explore country within**, then choose **Drill down**.
+The gateway calls the hosted agent again, retaining the channel breakdown and
+filtering the new country query to Europe. The chart updates in place:
+
+![Interactive Europe country drill-down with France and Germany split by Online and Retail, including a Germany Retail tooltip](docs/screenshots/web-europe-drilldown.png)
+
+*Four returned groups: two countries, each split by two channels. Unlike local
+filtering, this drill-down retrieves a new aggregation from the mock database.*
+
+#### The heatmap stays interactive here
+
+In a new conversation, ask **"Show a heatmap of revenue by month and region."**
+Unlike the Activity image fallback above, the custom client renders all **36
+cells as SVG marks**, with hover details:
+
+![Interactive monthly regional revenue heatmap with a tooltip for June 2025 in Europe showing revenue and units](docs/screenshots/web-heatmap-hover.png)
+
+#### Filter locally without another agent call
+
+Open **Series** and deselect **Americas** and **Asia Pacific**, leaving **Europe**.
+The status changes to **12 of 36 data points · filters run locally**:
+
+![The same heatmap filtered to Europe's twelve months, with the Series checkboxes and local-filter status visible](docs/screenshots/web-local-filter.png)
+
+*The capture walkthrough verified 36 to 12 visible cells with **zero network
+requests** during filtering. Reset filters restores all returned rows. The
+summary above the chart continues to describe the original query's full
+dataset, not the currently visible subset.*
+
+These are screenshots of the running **custom web chat**, not mockups or
+Microsoft 365 Copilot captures. MCP Apps uses the same chart component; its
+host chrome and feature availability depend on the MCP client.
 
 ### Copilot integration
 
