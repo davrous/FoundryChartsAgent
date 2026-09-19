@@ -146,6 +146,12 @@ public `/mcp` URL, never to the Foundry project endpoint. Provisioning,
 deployment, DNS, certificates, and OAuth registration are intentionally outside
 this sample's build and packaging commands.
 
+For a step-by-step production hosting and Microsoft 365 integration procedure,
+see the [M365 Copilot MCP App guide](../docs/m365-copilot-mcp-app.md). It uses a separate
+App Service, managed identity for Foundry invocation, and static Entra OAuth for
+Copilot callers. It also shows how to retrieve the real HTTPS `/mcp` URL.
+The documented MCP-only deployment excludes the local demo chat.
+
 | Variable | Purpose |
 |---|---|
 | `GATEWAY_MODE` | `local` (default) or `foundry` |

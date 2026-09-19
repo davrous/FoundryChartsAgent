@@ -9,6 +9,14 @@ Copilot access. Foundry does not automatically expose its MCP, web-chat, or
 OAuth-discovery routes. `GATEWAY_MODE=foundry` selects the upstream hosted agent;
 it does not deploy the gateway.
 
+For the complete production walkthrough, see
+[M365 Copilot MCP App guide](../docs/m365-copilot-mcp-app.md):
+gateway-only App Service deployment, retrieving the real MCP URL, managed
+identity access to the existing Foundry agent, Entra OAuth, widget CORS,
+Toolkit registration, sideloading and chart/drill-down acceptance checks.
+The existing Activity package is a different integration; do not replace its
+manifest or reuse its app identity for this declarative agent.
+
 ## Configure before packaging
 
 No resources are created by these files. Supply real values for:
@@ -29,6 +37,13 @@ If your Copilot host requires widget-origin CORS, add its exact generated
 `https://<hash>.widget-renderer.usercontent.microsoft.com` origin to
 `GATEWAY_MCP_ORIGINS`. Configure the documented Copilot/VS Code redirect URIs
 in the OAuth registration. No wildcard origins are accepted.
+Use v2 API access tokens and configure `ENTRA_AUDIENCE` with the gateway API
+client ID. Request the fully qualified API scope in OAuth, while
+`ENTRA_REQUIRED_SCOPES` contains the short `Charts.Read` token claim.
+Use static OAuth registration for Entra; it does not implement MCP dynamic
+client registration. Follow the current Microsoft guidance for the token-store
+registration's `AnyApp` restriction and tenant restriction, as detailed in
+the production guide.
 
 Refresh pinned tool schemas after changing Python tool signatures:
 
@@ -38,7 +53,11 @@ node appPackage/package.mjs
 ```
 
 The second command resolves templates into `appPackage/build/` and generates
-original 192×192 color / 32×32 transparent outline PNG icons. Package the
+basic 192×192 color / 32×32 transparent outline PNG icons. Before submission,
+replace the generated `build/color.png` and `build/outline.png` with the
+[pixel-validated sideload artwork](../m365sideloadmanifest/README.md#icons)
+and set the package manifest's `accentColor` to `#2735A6`. The package builder
+does not run the sideload builder's icon-compliance checks. Package the
 **contents** of `build/`, validate using Microsoft 365 Agents Toolkit, and
 upload through your tenant's supported app workflow. Templates containing
 `${{...}}` are deliberately not upload-ready; configuration/consent remain

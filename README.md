@@ -210,6 +210,10 @@ For Claude Desktop, follow the [local MCP App setup](gateway/README.md#claude-de
 including the Node/nvm fix if Desktop launches an older Node than your terminal.
 The gateway must already be running; the `mcp-remote` configuration does not start it.
 
+To use the same MCP App in Microsoft 365 Copilot with the deployed Foundry agent,
+follow the [production gateway and Copilot walkthrough](docs/m365-copilot-mcp-app.md),
+including how to obtain the real MCP Server URL.
+
 The UI bundles its dependencies, uses SVG, and shares its rendering component between chat and the MCP widget. Local filters act on the returned aggregate rows without a model or API call; drill-down performs a new query through the hosted agent. Local filters therefore do not recover raw records that were never returned.
 
 ### Interactive SVG in the custom web chat
@@ -261,14 +265,15 @@ host chrome and feature availability depend on the MCP client.
 
 ### Copilot integration
 
-[appPackage](appPackage/) contains a declarative-agent / MCP plugin starting point, not a Teams tab. Configure the externally reachable MCP URL and your registered authentication reference before packaging with Microsoft 365 Agents Toolkit. See that folder's guidance for schema and packaging details.
+Follow the dedicated **[M365 Copilot MCP App guide](docs/m365-copilot-mcp-app.md)**
+to reuse the production Foundry agent with an interactive chart inside Copilot.
+It covers gateway hosting, retrieving the MCP Server URL, managed identity,
+Entra OAuth, widget CORS, app packaging, sideloading and verification.
 
-For production, the gateway requires validated Entra bearer tokens. Anonymous operation is an explicit **loopback development mode only**. A protected-resource challenge is not a complete OAuth authorization server: configure the Entra application, delegated scope, consent, and plugin OAuth/SSO registration. MCP Apps in Microsoft 365 Copilot is reached through the declarative agent/plugin path; it is **not** automatically enabled by publishing this hosted agent through Activity. Client availability can vary.
-
-The included custom chat is a local development client, not a production sign-in
-implementation. Before exposing it publicly, add a sign-in/BFF integration as
-described in [gateway/README.md](gateway/README.md). The production gateway does
-not bypass bearer-token validation to make an unauthenticated browser work.
+The MCP server is a **separately hosted HTTPS gateway**; its URL is the gateway
+origin plus `/mcp`, not a Foundry Responses/Activity endpoint. This integration
+uses a declarative-agent/MCP plugin, not the existing Activity bot package or a
+Teams tab.
 
 ## Deployment and storage
 
