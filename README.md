@@ -146,7 +146,54 @@ PLAYGROUND_SERVICE_URL=http://host.docker.internal:56150/_connector ./chartagent
 
 The endpoint is still `http://localhost:8088/api/messages`. Do not change the native-process callback to `host.docker.internal`. If using a nondefault Playground port, change **both** its `--port` and the callback port.
 
-Use `/clear` to clear Activity conversation history. Chart cards include drill-down `Action.Submit` actions where the current grouping permits them. Typing activities keep longer requests alive; turns have a bounded timeout and report failures.
+Use `/clear` to clear Activity conversation history and cancel pending charts
+for that conversation. Chart cards include drill-down `Action.Submit` actions
+where the current grouping permits them.
+
+### Live progress and long-running chart delivery
+
+The [Activity delivery layer](src/charts_agent/activity_delivery.py) follows
+the Blender sample's progress/final-response pattern:
+
+- **Progress:** the agent reports real application stages: reading the schema,
+  querying the mock API, rendering, and saving images/preparing the card.
+  These are status messages, not model reasoning or estimated percentages.
+- **One final response:** summary text and **all** chart attachments travel
+  together. Sending terminal text first and the card as another message can
+  leave Copilot's active conversation showing only the first result until a
+  refresh.
+- **Streaming when supported:** the Agents SDK sends informative updates and
+  one final stream message containing the cards. SDK-unsupported channels,
+  including Teams agentic requests, receive ordinary progress messages and
+  a combined final message. Actual presentation is client-dependent.
+- **Long turns:** after **35 seconds**, the live response closes with a
+  "keep working in the background" notice. The result is pushed to the same
+  conversation through a **fresh connector**, preserving the inbound
+  identity, audience and token scopes. Progress keepalives run every
+  **15 seconds**; the total work deadline is **100 seconds**, including time
+  waiting for an earlier turn. Errors/timeouts after handoff are also pushed.
+  `expectReplies` clients keep one inline result instead; a buffered HTTP
+  reply cannot receive a later push.
+- **Isolation and cleanup:** turns serialize within each conversation,
+  follow-ups use the latest completed history, `/clear` cancels queued/running
+  jobs, and shutdown cancels outstanding work before closing chart services.
+  The sample caps active/queued turns at 32 per process and caches 128
+  conversation coordinators; each history retains the last 12 messages.
+
+Timing settings are documented in the [agent environment example](src/charts_agent/.env.example).
+Production overrides also need explicit forwarding in [azure.yaml](azure.yaml).
+Background work and `MemoryStorage` are **in-process, not durable jobs**:
+container replacement, scale-to-zero or routing to another replica can lose
+work/state. Production hardening requires durable jobs/history and
+conversation affinity or distributed coordination, plus delivery deduplication.
+Failed final sends are logged, not blindly retried.
+
+**Verification boundary:** deterministic tests cover streaming, combined
+cards, handoff, push authentication, concurrency and cancellation. This fixes
+a source-level delivery defect strongly supported by the compared Copilot
+HAR timelines; automatic live refresh still needs a signed-in Copilot/Teams
+retest after deploying the updated agent. It is separate from the resolved
+app-package 1.0.5 image-domain issue.
 
 ### Native chart and card-button drill-down
 

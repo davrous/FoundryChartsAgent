@@ -160,7 +160,7 @@ def test_activity_drill_returns_native_card(host):
     activities = response.json()["activities"]
     messages = [activity for activity in activities if activity["type"] == "message"]
     assert len(messages) == 1
-    assert messages[0]["text"] == "Synthetic data: Revenue by region"
+    assert messages[0]["text"] == bundle(ChartRequest()).summary
     assert messages[0]["attachments"]
     attachments = [a for activity in activities for a in activity.get("attachments", [])]
     assert attachments[0]["contentType"] == "application/vnd.microsoft.card.adaptive"

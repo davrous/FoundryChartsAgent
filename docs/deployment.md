@@ -310,6 +310,23 @@ Redact credentials and signed URLs before sharing log excerpts.
   the observed Microsoft image-proxy hostname in `validDomains`. This
   manifest-only change restored PNG and user-confirmed native-chart display
   in Copilot; verify the actual proxy host and both outputs in your tenant.
+  The subsequent **live-refresh fix is agent code**, not a manifest update:
+  deploy a new hosted version with approval, verify the Activity integration
+  actually invokes that version, then use a fresh conversation and:
+  1. Ask for a native line chart and a heatmap PNG fallback. Remain in the
+     conversation: progress and the final summary/card must appear without
+     switching away and back.
+  2. Check sanitized agent logs for `streaming` and `push_available`. The SDK
+     disables native streaming for Teams agentic requests; those use the
+     ordinary-message fallback. Do not infer the inbound mode from a browser HAR.
+  3. Test a turn lasting beyond the 35-second handoff in a controlled test
+     environment. Expect one handoff notice, then one combined summary/card
+     push to the same conversation; no duplicate chart or continued live
+     stream. After handoff, test a follow-up and `/clear`.
+  4. Confirm an error/work timeout is visible, and check both users and
+     independent conversations. A successful Responses test or local fake
+     connector is not proof of hosted proactive authentication or Copilot refresh.
+  See [delivery behavior and limits](../README.md#live-progress-and-long-running-chart-delivery).
 - **Web/MCP:** see [gateway hosting guidance](../gateway/README.md#hosting-distinction).
   Foundry does not expose the gateway's `/mcp` or web routes. Configure its
   independent hosting, HTTPS, Entra authentication and browser sign-in/BFF;
@@ -326,7 +343,11 @@ Redact credentials and signed URLs before sharing log excerpts.
   deployment: request a fresh chart and use its new URL.
 - **Production environment vs. production-ready product:** data remains
   synthetic and conversation history is not promised durable across container
-  replacement. Real business data needs tenant/user authorization at the query
+  replacement. Activity background jobs are also in-process: request completion
+  does not make their execution durable or prevent scale-to-zero. Use durable
+  work/history, conversation routing/coordination and idempotent delivery before
+  promising completion across replicas or restarts. Shutdown cancels jobs
+  before closing the chart service. Real business data needs tenant/user authorization at the query
   layer, durable scoped history, audit/retention policies, quotas and rate
   limits. Caller presentation metadata is not an authorization mechanism.
 
@@ -341,6 +362,7 @@ Redact credentials and signed URLs before sharing log excerpts.
 | Inspector says "Remote image blocked" | Use HTTPS Blob URLs and approve **Load Remote Images**. Local HTTP/8088 images are ineligible; Blob storage does not bypass the privacy prompt. |
 | Browser rejects a copied SAS URL | Copy just one complete URL, not `PNG_URL)` followed by the SVG Markdown link. Preserve percent encoding, especially `%2B` and `%3D`, and check expiry in UTC. The reported malformed `sv` error was caused by concatenated links, not the SDK's service version. |
 | CLI reports success but there is no chart | Inspect the tool/session error. `response.completed` can contain an apology; require both actual image links and downloaded-image checks. |
+| Copilot shows the card only after switching conversations | Check the deployed Activity bridge version. Final summary and attachments must be sent together, not as separate completed messages. Verify the progress/stream mode and final delivery timeline; changing Blob permissions or `validDomains` does not fix response ordering. |
 | `vl_convert` is missing locally | Use `./chartagent test` / the service-local virtual environment, not an unrelated root `.venv` or global Python. |
 
 ## Verified baseline

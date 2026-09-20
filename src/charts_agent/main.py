@@ -101,7 +101,10 @@ def create_app():
     async def lifespan(app):
         try:
             async with original_lifespan(app):
-                yield
+                try:
+                    yield
+                finally:
+                    await host.activity_turns.close()
         finally:
             await service.close()
 
