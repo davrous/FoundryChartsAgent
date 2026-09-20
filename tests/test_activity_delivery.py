@@ -86,24 +86,64 @@ async def test_streaming_matches_sdk_channel_capabilities(channel, mode, role, e
     assert supports_streaming(context) is expected
 
 
-async def test_real_sdk_stream_has_informative_progress_and_one_final_with_all_cards():
-    context, _, sent, _, _ = await turn(mode="stream")
+@pytest.mark.parametrize("channel,mode", [
+    ("msteams", "normal"), ("webchat", "normal"), ("directline", "normal"), ("test", "stream"),
+])
+async def test_real_sdk_stream_delivers_content_before_final_with_all_cards(channel, mode):
+    context, _, sent, _, _ = await turn(channel=channel, mode=mode)
     delivery = ActivityDelivery(context)
     cards = [Attachment(content_type="application/vnd.microsoft.card.adaptive", content={"type": "AdaptiveCard"})
              for _ in range(2)]
     await delivery.status("Querying data...")
     await delivery.status("Rendering chart...")
     await delivery.finish("Here are both charts.", cards)
-    assert [a.type for a in sent] == ["typing", "typing", "message"]
+    assert [a.type for a in sent] == ["typing", "typing", "typing", "message"]
     infos = [next(e for e in a.entities if e.type == "streaminfo") for a in sent]
-    assert [e.stream_type for e in infos] == ["informative", "informative", "final"]
-    assert [e.stream_sequence for e in infos] == sorted(e.stream_sequence for e in infos)
-    assert len({e.stream_id for e in infos}) == 1
+    assert [e.stream_type for e in infos] == ["informative", "informative", "streaming", "final"]
+    assert [e.stream_sequence for e in infos] == [1, 2, 3, 4]
+    stream_id = infos[0].stream_id or "response-1"
+    assert all(e.stream_id == stream_id for e in infos[1:])
+    assert sent[-2].text == sent[-1].text
     assert sent[-1].text == "Here are both charts."
     assert sent[-1].attachments == cards
     assert all(not a.attachments for a in sent[:-1])
     with pytest.raises(RuntimeError, match="already"):
         await delivery.finish("Duplicate", cards)
+
+
+async def test_stream_finalization_waits_for_content_transport_to_complete():
+    context, _, sent, _, _ = await turn(mode="stream")
+    delivery = ActivityDelivery(context)
+    await delivery.status("Rendering chart...")
+    content_started, acknowledge = asyncio.Event(), asyncio.Event()
+    send = context.adapter.send_activities.side_effect
+
+    async def delayed_send(context, activities):
+        if any(e.type == "streaminfo" and e.stream_type == "streaming"
+               for a in activities for e in a.entities or []):
+            content_started.set()
+            await acknowledge.wait()
+        return await send(context, activities)
+
+    context.adapter.send_activities.side_effect = delayed_send
+    card = Attachment(content_type="application/vnd.microsoft.card.adaptive", content={"type": "AdaptiveCard"})
+    final = asyncio.create_task(delivery.finish("Summary", [card]))
+    try:
+        await asyncio.wait_for(content_started.wait(), timeout=1)
+        assert not final.done()
+        assert not delivery.stream_context.final_sent
+        assert all(a.type == "typing" and not a.attachments for a in sent)
+        acknowledge.set()
+        await asyncio.wait_for(final, timeout=1)
+        assert [e.stream_type for a in sent for e in a.entities if e.type == "streaminfo"] == [
+            "informative", "streaming", "final",
+        ]
+        assert sent[-1].attachments == [card]
+    finally:
+        acknowledge.set()
+        if not final.done():
+            final.cancel()
+        await asyncio.gather(final, return_exceptions=True)
 
 
 async def test_non_streaming_progress_and_combined_final():
@@ -211,16 +251,28 @@ async def test_finished_turn_does_not_send_handoff():
     client.conversations.send_to_conversation.assert_not_awaited()
 
 
-@pytest.mark.parametrize("fail_during_progress", [True, False])
-async def test_sdk_stream_cancellation_is_not_reported_as_success(fail_during_progress):
+@pytest.mark.parametrize("fail_during", ["informative", "streaming", "final"])
+async def test_sdk_stream_cancellation_is_not_reported_as_success(fail_during):
     context, *_ = await turn(channel="msteams")
     delivery = ActivityDelivery(context)
-    if fail_during_progress:
-        context.adapter.send_activities.side_effect = PermissionError("403 Forbidden")
+    send = context.adapter.send_activities.side_effect
+    attempted = []
+
+    async def failing_send(context, activities):
+        for activity in activities:
+            info = next(e for e in activity.entities if e.type == "streaminfo")
+            attempted.append(info.stream_type)
+            if info.stream_type == fail_during:
+                raise PermissionError("403 Forbidden")
+        return await send(context, activities)
+
+    context.adapter.send_activities.side_effect = failing_send
     await delivery.status("Working")
-    context.adapter.send_activities.side_effect = PermissionError("403 Forbidden")
     with pytest.raises(RuntimeError, match="cancelled"):
         await delivery.finish("Result", [])
+    stages = ["informative", "streaming", "final"]
+    assert attempted == stages[:stages.index(fail_during) + 1]
+    assert not delivery.stream_context.final_sent
 
 
 async def test_failed_handoff_notice_does_not_lose_proactive_result(caplog):

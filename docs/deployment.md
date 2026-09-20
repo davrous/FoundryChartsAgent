@@ -310,15 +310,37 @@ Redact credentials and signed URLs before sharing log excerpts.
   the observed Microsoft image-proxy hostname in `validDomains`. This
   manifest-only change restored PNG and user-confirmed native-chart display
   in Copilot; verify the actual proxy host and both outputs in your tenant.
-  The subsequent **live-refresh fix is agent code**, not a manifest update:
-  deploy a new hosted version with approval, verify the Activity integration
-  actually invokes that version, then use a fresh conversation and:
-  1. Ask for a native line chart and a heatmap PNG fallback. Remain in the
+  The subsequent **live-refresh investigation concerns agent delivery code
+  and downstream handling**, not the manifest. Production version 3 improved
+  progress but did not resolve Copilot's refresh requirement. The current
+  source drains a content-streaming chunk before finalizing with attachments;
+  real-SDK tests verify that sequence, not Copilot's rendering.
+  Version 4's user retest reports live donut rendering in direct Teams and
+  Copilot inside Teams, but standalone Copilot still requires refresh. The
+  working embedded capture uses @mention in an existing work chat; the
+  failing standalone capture uses the dedicated agent chat. Both receive
+  content before completion, but only the embedded capture maps a subsequent
+  async message and invokes the card renderer. These are not equivalent
+  entry points, and the captures do not retain the full live card payloads.
+  Keep production changes approval-gated; do not redeploy merely to add a delay.
+  Verify which hosted version the Activity integration invokes, then:
+  1. Ask for a native line chart, "Show 2025 orders by channel as a donut
+     chart", and a heatmap PNG fallback. Remain in the
      conversation: progress and the final summary/card must appear without
      switching away and back.
+     Compare **@mention in Copilot work chat** and **dedicated agent chat**
+     separately in standalone Copilot and Copilot inside Teams, using the
+     same account/prompt and both fresh and subsequent turns. Record the
+     host, entry point, client state version and conversation/request IDs.
+     Direct Teams is a separate control, not a substitute for Copilot checks.
   2. Check sanitized agent logs for `streaming` and `push_available`. The SDK
      disables native streaming for Teams agentic requests; those use the
      ordinary-message fallback. Do not infer the inbound mode from a browser HAR.
+     For supported streams, `Activity stream sent` must show `informative`,
+     then `streaming` without attachments, then `final` with the chart
+     attachment count. These logs omit message bodies and signed URLs.
+     Correlate with client telemetry: content should arrive before turn
+     resolution, and the card must display live, not merely exist in history.
   3. Test a turn lasting beyond the 35-second handoff in a controlled test
      environment. Expect one handoff notice, then one combined summary/card
      push to the same conversation; no duplicate chart or continued live

@@ -38,10 +38,20 @@ class StreamContext(TurnContext):
         except Exception as error:
             self.send_error = error
             raise
-        if any(isinstance(entity, StreamInfo) and entity.stream_type == "final"
-               for activity in activities for entity in activity.entities or []):
-            self.final_sent = True
+        for activity in activities:
+            for entity in activity.entities or []:
+                if isinstance(entity, StreamInfo):
+                    logger.info(
+                        "Activity stream sent: type=%s sequence=%s attachments=%d",
+                        entity.stream_type, entity.stream_sequence, len(activity.attachments or []),
+                    )
+                    if entity.stream_type == "final":
+                        self.final_sent = True
         return responses
+
+    def raise_for_send_error(self) -> None:
+        if self.send_error is not None:
+            raise RuntimeError("The channel cancelled or failed the stream") from self.send_error
 
 
 def supports_streaming(context: TurnContext) -> bool:
@@ -139,10 +149,13 @@ class ActivityDelivery:
 
     async def _live_final(self, text: str, attachments: list[Attachment]) -> None:
         if self.stream is not None:
-            if self.stream_context.send_error is not None:
-                raise RuntimeError("The channel cancelled or failed the stream") from self.stream_context.send_error
+            self.stream_context.raise_for_send_error()
             self.stream.set_attachments(attachments)
             self.stream.queue_text_chunk(text)
+            # end_stream() coalesces an undrained text chunk into "final".
+            # Deliver the "streaming" content phase before finalizing with cards.
+            await self.stream.wait_for_queue()
+            self.stream_context.raise_for_send_error()
             await self.stream.end_stream()
             # The SDK treats a Teams 403 as stream cancellation rather than raising.
             if not self.stream_context.final_sent:

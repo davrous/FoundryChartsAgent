@@ -158,12 +158,14 @@ the Blender sample's progress/final-response pattern:
 - **Progress:** the agent reports real application stages: reading the schema,
   querying the mock API, rendering, and saving images/preparing the card.
   These are status messages, not model reasoning or estimated percentages.
-- **One final response:** summary text and **all** chart attachments travel
-  together. Sending terminal text first and the card as another message can
-  leave Copilot's active conversation showing only the first result until a
-  refresh.
+- **One final outgoing Activity:** summary text and **all** chart attachments
+  travel together. This avoids a source-level split, but does not guarantee
+  that downstream services will store or display them as one message.
 - **Streaming when supported:** the Agents SDK sends informative updates and
-  one final stream message containing the cards. SDK-unsupported channels,
+  a content chunk, waits for that chunk's send to complete, then sends one
+  final stream message containing the cards on the same stream. Without this
+  drain barrier, the SDK can collapse the queued content into the final send,
+  skipping the content-streaming phase. SDK-unsupported channels,
   including Teams agentic requests, receive ordinary progress messages and
   a combined final message. Actual presentation is client-dependent.
 - **Long turns:** after **35 seconds**, the live response closes with a
@@ -188,12 +190,28 @@ work/state. Production hardening requires durable jobs/history and
 conversation affinity or distributed coordination, plus delivery deduplication.
 Failed final sends are logged, not blindly retried.
 
-**Verification boundary:** deterministic tests cover streaming, combined
-cards, handoff, push authentication, concurrency and cancellation. This fixes
-a source-level delivery defect strongly supported by the compared Copilot
-HAR timelines; automatic live refresh still needs a signed-in Copilot/Teams
-retest after deploying the updated agent. It is separate from the resolved
-app-package 1.0.5 image-domain issue.
+**Verification boundary:** the production version 3 retest confirmed progress
+updates, but Copilot still required switching conversations to display the
+chart. Its trace finalized the text stream before a separate chart message
+was stored. The current source corrects the missing content-streaming phase;
+real-SDK tests verify the ordered sends, transport acknowledgement, combined
+cards, cancellation and existing handoff behavior. The version 4 donut retest
+still does **not** establish cross-host live-rendering support:
+
+| Tested experience | Reported live result |
+|---|---|
+| Direct Teams chat | Chart appears without navigation. |
+| Copilot inside Teams, using @mention in an existing work chat | Chart appears after a blink; client telemetry confirms post-completion card rendering. |
+| Standalone Copilot, using the dedicated agent chat | Chart still requires refresh; the capture has no corresponding post-completion card mapping/render event. |
+
+Both Copilot traces now show content arriving before completion. Their later
+async-message handling differs, but the captures also differ in entry point,
+conversation state and client state version: this is not a controlled
+host-only comparison or proof of a specific client bug. Test @mention and
+dedicated agent chat separately in both hosts, including fresh and subsequent
+turns. This remains separate from the resolved app-package 1.0.5 image-domain
+issue; further agent changes need correlated delivery evidence, not arbitrary
+timing delays.
 
 ### Native chart and card-button drill-down
 
