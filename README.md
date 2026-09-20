@@ -1,67 +1,237 @@
 # Foundry Charts Agent
 
-A Python **Microsoft Foundry Hosted Agent** that queries a deterministic, fictional sales database and renders the same chart differently for each caller. No Teams tab is used.
+Build a **Python Microsoft Foundry hosted agent** that turns natural-language
+questions into charts, lets users explore the underlying data, and delivers
+the right experience for each client.
 
-| Caller | Output |
-|---|---|
-| Responses API (default) | A PNG image link plus a downloadable SVG |
-| Activity Protocol / M365 Agents Playground / Teams / M365 Copilot | Native Adaptive Card `Chart.*` controls when representable; otherwise a PNG image card |
-| Custom web chat | Interactive SVG, hover details, local filters and server-side drill-down |
-| MCP Apps host | The same interactive component, packaged as self-contained HTML and bound to an MCP tool |
+The sample queries a fictional sales database through a mock HTTP API. Users
+can ask for an overview, compare metrics, and drill from regions into countries
+or from categories into products. A shared chart result becomes a static image,
+a native Adaptive Card, or an interactive SVG widget depending on the caller.
 
-The agent uses `FoundryChatClient` + Microsoft Agent Framework + a combined `ResponsesHostServer` / `ActivityAgentServerHost`, following [davrous/blenderagent](https://github.com/davrous/blenderagent). It does **not** create a competing prompt agent with the hosted agent's name. The project was scaffolded from Microsoft's [Responses local-tools sample](https://github.com/microsoft-foundry/foundry-samples/tree/main/samples/python/hosted-agents/agent-framework/responses/02-tools).
+This is also a pattern for **other dynamic content**: keep data retrieval and
+business logic in the agent, then adapt presentation to each protocol and host.
+There is no Teams tab.
+
+## What you can build
+
+### One agent, multiple protocols and rendering levels
+
+| Client | Connection | Experience |
+|---|---|---|
+| Responses API client | Foundry hosted agent, Responses protocol | Static PNG image link and downloadable SVG. This is the default output. |
+| Teams, Microsoft 365 Copilot, or M365 Agents Playground | Foundry hosted agent, Activity Protocol | Native Adaptive Card charts when the chart can be represented; otherwise a PNG image card. Cards can include drill-down actions. |
+| Custom web chat | Web gateway calling the agent's Responses API | Interactive SVG with hover details, client-side filters, SVG download, and drill-down queries. |
+| MCP Apps-capable client | MCP gateway calling the same Responses API | The same interactive component embedded in the host conversation as an MCP App. |
+
+The hosted agent exposes **Responses and Activity**. The optional gateway adds
+web and MCP interfaces; it is an adapter, not a second charting agent.
+Native chart controls and MCP Apps support depend on the client and its version.
+The two Microsoft 365 integration paths are separate: an Activity app renders
+cards/images, while an MCP App integration renders a custom widget in a
+compatible host.
+
+**In this guide:** [Experiences](#experiences) · [Architecture](#architecture) ·
+[Run locally](#configure-and-run-locally) · [Deploy](#deploy-to-production) ·
+[Extend the sample](#technical-guide-and-customization) · [References](#references)
+
+## Experiences
+
+All examples use **synthetic 2025 sales data**. Screenshots show the running
+sample in the identified client; they do not require access to the original
+deployment.
+
+### Native charts in Teams and Microsoft 365
+
+Ask **"Compare monthly 2025 revenue by region as a line chart."**
+The Activity integration returns a native Adaptive Card chart rather than a
+web page or custom tab.
+
+![Foundry Charts in Teams, displaying a native Adaptive Card line chart with a regional revenue tooltip](docs/screenshots/teams-adaptivecard-linechart.png)
+
+*Teams connected to a Foundry-hosted agent. The chart is rendered by the
+client's Adaptive Card controls, not the custom web renderer.*
+
+Cards can also include **Explore** buttons. For example, a revenue-by-region
+chart offers a country-level query for the selected region.
+
+### Static output and automatic image fallback
+
+An ordinary Responses caller receives a PNG and an SVG download for
+**"Show revenue by region as a bar chart."** The SVG is a scalable artifact;
+it is not the interactive chat widget.
+
+![Static Responses output showing revenue bars for Americas, Asia Pacific and Europe](docs/screenshots/responses-static-chart.png)
+
+The Activity integration also uses images when a chart has no suitable native
+control. For **"Show a heatmap of revenue by month and region."**, it returns
+an image card with a fallback explanation and data preview.
+
+![M365 Agents Playground displaying a heatmap image card with its native-chart fallback explanation](docs/screenshots/playground-image-fallback.png)
+
+### Interactive exploration in the custom web chat
+
+Ask **"Show revenue by region split by channel as a grouped bar chart."**
+Hover over marks, select categories or series, download the SVG, and drill into
+a region without leaving the conversation.
+
+![Custom web chat with an interactive grouped SVG chart, hover tooltip, filters and country drill-down controls](docs/screenshots/web-interactive-overview.png)
+
+<details>
+<summary>Explore drill-down, heatmaps, and local filtering</summary>
+
+Select **Europe** under **Explore country within**, then choose **Drill down**.
+The agent queries country-level data for Europe while retaining the channel
+breakdown, and the chart updates in place.
+
+![Country-level drill-down showing France and Germany split by Online and Retail, with a hover tooltip](docs/screenshots/web-europe-drilldown.png)
+
+The heatmap that uses an image fallback in Activity remains interactive in
+the custom client, with SVG marks and hover details.
+
+![Interactive monthly regional revenue heatmap with a tooltip for Europe](docs/screenshots/web-heatmap-hover.png)
+
+Use **Series** to keep only **Europe**. These filters operate on the rows
+already returned to the client: they do not call the agent or query the API.
+**Reset filters** restores the original selection.
+
+![Heatmap filtered locally to Europe's twelve months, with the Series controls visible](docs/screenshots/web-local-filter.png)
+
+Local filtering and drill-down are deliberately different. Filtering changes
+the view of existing rows; drill-down retrieves a new aggregation. The summary
+describes the original query, not a locally filtered subset.
+
+</details>
+
+### The same interactive component in an MCP App
+
+An MCP Apps-capable client can display the shared widget directly in its chat.
+The gateway exposes chart tools and a self-contained HTML resource; the host
+connects tool results and subsequent drill-down calls to that resource.
+
+![Interactive chart embedded in Claude Desktop through the sample's MCP App gateway](docs/screenshots/claude-interactive-mcpapp.png)
+
+*Shown in Claude Desktop. Host chrome, permissions, and widget availability
+depend on the MCP client. See the [Copilot integration](#copilot-integration)
+section for the Microsoft 365 deployment path.*
 
 ## Architecture
 
-```text
-                              Foundry Hosted Agent (Python)
-Responses /responses ------> caller context + Agent Framework tools
-Activity /api/messages ----->        |
-                                    v
-                             typed ChartRequest
-                                    |
-                             HTTP mock database API
-                             (seeded SQLite, no model-generated SQL)
-                                    |
-                             aggregate ChartRow[]
-                                    |
-                             shared Vega-Lite specification
-                              /                    \
-                    vl-convert-python        native card mapper
-                       SVG + PNG                 Chart.*
-                              \                    /
-                               protocol formatter
+The Python agent uses **Microsoft Agent Framework** and `FoundryChatClient`.
+A combined `ResponsesHostServer` / `ActivityAgentServerHost` serves the two
+hosted protocols. Both paths share data access, validation, rendering and
+artifact storage.
 
-Custom chat ----> web/MCP gateway ----> local /responses OR Foundry agent_reference
-MCP host -------> /mcp                    (not a second chart agent)
-                     |
-                ui://charts/app.html
-                same SVG component as custom chat
+```text
+Responses clients -----------------------------+
+                                               |
+Teams / M365 Copilot -- Activity / Azure Bot ---+--> Foundry hosted agent
+                                               |      |
+Custom web chat ---+                           |      +-- Caller context + tools
+                   +--> Web / MCP gateway -----+      |
+MCP Apps host -----+    (Responses upstream)           v
+                                                 ChartRequest
+                                                      |
+                                               HTTP data API
+                                            (mock seeded SQLite)
+                                                      |
+                                                 ChartRow[]
+                                                      |
+                                    +-----------------+-----------------+
+                                    |                                   |
+                             Vega-Lite spec                      Native card mapper
+                             + static PNG/SVG                    or image fallback
+                                    |                                   |
+                                    +-----------------+-----------------+
+                                                      |
+                              ChartBundle (request, rows, spec, URLs, card)
+                                                      |
+                                         Protocol-specific formatting
+                                          /                        \
+                            Responses: image links           Activity: card
+                            or interactive payload
+                                      |
+                             Web / MCP client renders SVG
+                             (interactive payload only)
 ```
 
-The mock API is called through `httpx` even in local mode: an ASGI transport keeps the sample to two processes without replacing the API boundary with direct database access. Set `MOCK_API_URL` to move the mock service out of process. In development its endpoints are also inspectable under `/mock/schema` and `/mock/query`.
+1. **Understand the request.** The agent discovers the data schema and
+   produces a validated `ChartRequest`, rather than executable plotting code
+   or model-generated SQL.
+2. **Query the data.** The chart service calls an HTTP API for aggregate rows.
+   The sample API owns a deterministic SQLite dataset.
+3. **Build a shared result.** `ChartBundle` contains the request, rows, summary,
+   Vega-Lite specification, image URLs and Adaptive Card representation.
+4. **Adapt delivery.** Responses defaults to static links; Activity sends
+   cards; the gateway requests interactive output for web and MCP clients.
 
-### Why Vega-Lite?
+The native card mapper consumes the same request and rows as Vega-Lite; it
+does not attempt to embed SVG or Vega inside an Adaptive Card.
 
-- One declarative grammar drives Python static rendering and browser SVG rendering.
-- `vl-convert-python` produces PNG/SVG without a browser, Node server, or generated executable Python.
-- Charts use the generic `sans-serif` family: `vl-convert` includes a Liberation Sans fallback for minimal hosted runtimes. Hard-coding a desktop font such as Arial can leave PNG titles, axes and legends blank even though the SVG displays text using browser font fallback.
-- The browser uses **Vega's expression interpreter**, not its default `new Function` expression compiler. This matters for the restrictive MCP Apps CSP, which does not allow `unsafe-eval`.
-- Native Adaptive Cards do not accept Vega or SVG. They receive a separate, small mapping from the **same validated request and aggregate rows**.
-- ECharts is an excellent alternative for highly bespoke charts, but its SVG server rendering adds a Node rendering runtime to this Python sample.
+For local development, `httpx` uses an ASGI transport to call the mock API
+in-process. This preserves the HTTP boundary without requiring a third
+service. Set `MOCK_API_URL` to use a separately hosted API.
 
-## Quick start
+The gateway has two upstream modes: **local**, forwarding to the development
+agent, and **foundry**, invoking a deployed hosted agent with an
+`agent_reference`. The same frontend works with either.
 
-Prerequisites: **Python 3.13**, **Node.js 20.19+**, Azure CLI signed into the tenant of an existing Foundry project, and a deployed model supporting tool calling. This sample does not provision or deploy Azure resources during setup.
+## Configure and run locally
+
+### Prerequisites
+
+- **Python 3.13.** On macOS/Linux, `python3` should select that version.
+- **Node.js 20.19+** and npm.
+- **Azure CLI**, signed into the tenant containing your Foundry project.
+- An existing **Foundry project and tool-calling model deployment**, with
+  permission to invoke the model.
+- Optional: [M365 Agents Playground](https://learn.microsoft.com/microsoft-365/agents-sdk/test-with-toolkit-project)
+  for Activity testing, and an MCP Apps-capable client for the widget.
+
+Local setup installs dependencies and builds the UIs. It does **not** provision
+Azure resources or deploy the agent. Natural-language requests use your
+configured model deployment and may incur model charges.
+
+### 1. Get the code and configure the agent
 
 ```bash
+git clone https://github.com/davrous/FoundryChartsAgent.git
+cd FoundryChartsAgent
 cp src/charts_agent/.env.example src/charts_agent/.env
-# Edit the project endpoint and existing model deployment.
+```
+
+Edit the copied `.env` with your own values:
+
+| Setting | Local configuration |
+|---|---|
+| `FOUNDRY_PROJECT_ENDPOINT` | Your Foundry project endpoint. |
+| `AZURE_AI_MODEL_DEPLOYMENT_NAME` | The name of your existing tool-calling model deployment. |
+| `CHARTS_DEV_MODE` | Keep `true` for local development. |
+| `ARTIFACT_MODE` | Keep `local` to save PNG/SVG files on your machine. |
+| `ARTIFACT_BASE_URL` | Keep `http://localhost:8088/artifacts` when using the default port. |
+
+Authentication uses `DefaultAzureCredential`, including your Azure CLI login.
+No model key is required by this configuration, and Azure tokens are not sent
+to the browser. Keep `.env` files and credentials out of source control.
+
+### 2. Install dependencies and start the agent
+
+From the repository root:
+
+```bash
 ./chartagent setup
 ./chartagent dev
 ```
 
-The local environment created for this workspace uses the requested existing project and `gpt-5.4-mini`. Its endpoint settings are in ignored `.env` / `.azure` files, not credentials in source.
+The setup command creates the Python environment at `src/charts_agent/.venv`,
+installs the locked dependencies, and builds both web clients. Keep the agent
+running at **http://localhost:8088**.
+
+**Windows:** use `./chartagent.ps1 setup`, `./chartagent.ps1 dev`, and the same
+PowerShell launcher for the remaining commands. It uses Python 3.13 through
+the Windows Python launcher.
+
+### 3. Open the custom web chat
 
 In a second terminal:
 
@@ -69,171 +239,265 @@ In a second terminal:
 ./chartagent web
 ```
 
-Open **http://localhost:8190**. The agent runs at **http://localhost:8088** by default.
-To use another agent port, set `PORT` for both `dev` and `playground`, and set
-`LOCAL_AGENT_URL` to the matching URL for `web`.
+Open **http://localhost:8190**. The gateway defaults to the local agent; no
+additional configuration is needed for the standard native setup.
+Use [gateway/.env.example](gateway/.env.example) if you need different ports,
+a deployed upstream, or gateway-specific settings.
 
-On Windows, use the equivalent `./chartagent.ps1 setup`, `dev`, `web`, `playground`, and `test` commands.
+Try these requests:
 
-Try:
+| Goal | Prompt |
+|---|---|
+| Overview | Show 2025 revenue by region as a bar chart. |
+| Follow-up | Drill into Europe by country. |
+| Trend | Compare monthly 2025 revenue by region as a line chart. |
+| Distribution | Show 2025 orders by channel as a donut chart. |
+| Complex visualization | Show a heatmap of 2025 revenue by month and region. |
+| Relationship | Scatter plot of units versus profit by product. |
+| Target | Show revenue against a target of 1000000 as a gauge. |
 
-- "Show revenue by region as a bar chart."
-- "Drill into Europe by country."
-- "Monthly revenue split by region as a line chart."
-- "Show a heatmap of revenue by month and region."
-- "Scatter plot of units versus profit by product."
-- "Show a donut of orders by channel."
-- "Show revenue against a target of 1000000 as a gauge."
+### 4. Try the Responses API
 
-All figures are **synthetic 2025 data**. Unknown dimensions, values, metrics, invalid dates and unsupported query shapes fail validation rather than silently returning guessed data.
-
-### Credentials
-
-The native process uses `DefaultAzureCredential`, including the current Azure CLI login. Tokens and model credentials never go to the browser. If auth fails, sign into the correct tenant yourself and verify the configured deployment name; do not put tokens in prompts or source.
-
-The optional container commands mirror the Blender launcher:
-
-```bash
-./chartagent rebuild
-./chartagent start
-# or ./chartagent up
-```
-
-Native development is the simplest keyless path. A plain local Python container has neither managed identity nor the host's Azure CLI; supply a supported developer credential explicitly if running it locally. In Foundry use the hosted identity. The launcher does not copy your Azure CLI token cache into an image.
-
-### Responses API
+With the agent still running:
 
 ```bash
 curl http://localhost:8088/responses \
   -H 'Content-Type: application/json' \
-  -d '{"input":"Show revenue by region","stream":false}'
+  -d '{"input":"Show 2025 revenue by region","stream":false}'
 ```
 
-The output contains Markdown image links, **not** a fabricated `output_image` response item. Both streaming and non-streaming Responses calls are supported. The hosted middleware emits chart payloads deterministically, rather than asking the model to reproduce URLs or serialized specifications.
+The response contains Markdown links to the PNG and SVG. Both streaming and
+non-streaming Responses calls are supported. See
+[protocol contracts](#protocol-contracts) to request interactive output from
+your own client.
 
-Custom clients explicitly send `metadata.chart_output = "interactive"`. The gateway parses the resulting fenced `chart` payload into the shared `ChartBundle`. For deterministic drill-down, it sends a validated `ChartRequest` as the compact JSON string `metadata.chart_request`; the sample enforces the Responses metadata value limit of 512 characters. Larger selections should be redesigned as a server-side saved-query identifier, not silently truncated.
+### 5. Try the Activity experience in M365 Agents Playground
 
-Caller metadata selects **presentation only**, never permissions.
-
-#### Static output outside the Activity experience
-
-For `"Show revenue by region as a bar chart."`, an ordinary Responses caller
-receives the PNG below, even though this chart also has a native Adaptive Card
-equivalent. The SVG download is a scalable artifact, not the interactive chat
-component. The custom web/MCP clients explicitly opt into interactive output.
-
-![Static Responses output: revenue bars for Americas, Asia Pacific and Europe, without interactive controls](docs/screenshots/responses-static-chart.png)
-
-*Actual 960 x 540 PNG returned by the default Responses call. A copy is stored
-with this README so the example does not depend on a running localhost server
-or an expiring artifact URL.*
-
-## Microsoft 365 Agents Playground
-
-Install [Microsoft 365 Agents Playground](https://learn.microsoft.com/microsoft-365/agents-sdk/test-with-toolkit-project) and keep `./chartagent dev` running:
+With Playground installed and the agent running, open another terminal:
 
 ```bash
 ./chartagent playground
 ```
 
-The script uses the Blender sample's `-e .../api/messages --service-url .../_connector` pattern. Both `/activity/messages` and `/api/messages` are handled by the official Activity host.
+The launcher connects Playground to `http://localhost:8088/api/messages`
+and configures its local connector callback. Ask for a revenue-by-region bar
+chart, then select **Explore Europe** to issue a country-level query.
 
-For a local container, the callback must be reachable from inside it:
+![M365 Agents Playground showing a revenue-by-region Adaptive Card with Explore buttons](docs/screenshots/playground-native-chart.png)
 
-```bash
-PLAYGROUND_SERVICE_URL=http://host.docker.internal:56150/_connector ./chartagent playground
-```
+<details>
+<summary>Country-level card returned by the drill-down action</summary>
 
-The endpoint is still `http://localhost:8088/api/messages`. Do not change the native-process callback to `host.docker.internal`. If using a nondefault Playground port, change **both** its `--port` and the callback port.
+![M365 Agents Playground showing France and Germany in the Europe drill-down card](docs/screenshots/playground-europe-drilldown.png)
 
-Use `/clear` to clear Activity conversation history and cancel pending charts
-for that conversation. Chart cards include drill-down `Action.Submit` actions
-where the current grouping permits them.
+</details>
 
-### Live progress and long-running chart delivery
+Use **`/clear`** to reset Activity conversation history and cancel pending work
+for that conversation. Both `/api/messages` and `/activity/messages` are
+handled by the Activity host.
 
-The [Activity delivery layer](src/charts_agent/activity_delivery.py) follows
-the Blender sample's progress/final-response pattern:
+### 6. Connect an MCP Apps client
 
-- **Progress:** the agent reports real application stages: reading the schema,
-  querying the mock API, rendering, and saving images/preparing the card.
-  These are status messages, not model reasoning or estimated percentages.
-- **One final outgoing Activity:** summary text and **all** chart attachments
-  travel together. This avoids a source-level split, but does not guarantee
-  that downstream services will store or display them as one message.
-- **Streaming when supported:** the Agents SDK sends informative updates and
-  a content chunk, waits for that chunk's send to complete, then sends one
-  final stream message containing the cards on the same stream. Without this
-  drain barrier, the SDK can collapse the queued content into the final send,
-  skipping the content-streaming phase. SDK-unsupported channels,
-  including Teams agentic requests, receive ordinary progress messages and
-  a combined final message. Actual presentation is client-dependent.
-- **Long turns:** after **35 seconds**, the live response closes with a
-  "keep working in the background" notice. The result is pushed to the same
-  conversation through a **fresh connector**, preserving the inbound
-  identity, audience and token scopes. Progress keepalives run every
-  **15 seconds**; the total work deadline is **100 seconds**, including time
-  waiting for an earlier turn. Errors/timeouts after handoff are also pushed.
-  `expectReplies` clients keep one inline result instead; a buffered HTTP
-  reply cannot receive a later push.
-- **Isolation and cleanup:** turns serialize within each conversation,
-  follow-ups use the latest completed history, `/clear` cancels queued/running
-  jobs, and shutdown cancels outstanding work before closing chart services.
-  The sample caps active/queued turns at 32 per process and caches 128
-  conversation coordinators; each history retains the last 12 messages.
+Keep the agent and gateway running. Connect an MCP Apps-capable client to
+**http://127.0.0.1:8190/mcp**. The gateway exposes `get_chart` and `drill_chart`,
+with the UI resource `ui://charts/app.html`.
 
-Timing settings are documented in the [agent environment example](src/charts_agent/.env.example).
-Production overrides also need explicit forwarding in [azure.yaml](azure.yaml).
-Background work and `MemoryStorage` are **in-process, not durable jobs**:
-container replacement, scale-to-zero or routing to another replica can lose
-work/state. Production hardening requires durable jobs/history and
-conversation affinity or distributed coordination, plus delivery deduplication.
-Failed final sends are logged, not blindly retried.
+For clients that need a local stdio bridge, follow the
+[Claude Desktop setup guide](gateway/README.md#claude-desktop-local-mcp-app).
+The bridge connects to the running gateway; it does not start either service.
+An MCP host without Apps support receives text and structured tool results
+instead of the embedded widget.
 
-**Verification boundary:** the production version 3 retest confirmed progress
-updates, but Copilot still required switching conversations to display the
-chart. Its trace finalized the text stream before a separate chart message
-was stored. The current source corrects the missing content-streaming phase;
-real-SDK tests verify the ordered sends, transport acknowledgement, combined
-cards, cancellation and existing handoff behavior. The version 4 donut retest
-still does **not** establish cross-host live-rendering support:
+### Ports, debugging, and optional containers
 
-| Tested experience | Reported live result |
+- Set `PORT` consistently for `dev` and `playground` to change the agent port.
+  Set `LOCAL_AGENT_URL` to the matching URL for the gateway, and update
+  `ARTIFACT_BASE_URL` if you configured it explicitly.
+- Set `GATEWAY_PORT` to change the web/MCP port.
+- Use the supplied [VS Code tasks](.vscode/tasks.json) and
+  [debug configurations](.vscode/launch.json) to run or debug the services.
+  Select the service-local Python environment, not an unrelated root `.venv`.
+- `./chartagent rebuild`, `start`, and `up` provide optional container
+  workflows. A local container needs an explicit supported Azure credential;
+  it does not inherit the host's Azure CLI login. Native development is the
+  simplest keyless setup.
+- For Playground with a local container, set
+  `PLAYGROUND_SERVICE_URL=http://host.docker.internal:56150/_connector` so
+  the agent can reach the callback.
+
+## Deploy to production
+
+Deploy the hosted agent first, then configure the client integration you need.
+**Activity distribution and web/MCP gateway hosting are separate choices.**
+
+| Component | Where it runs | When needed |
+|---|---|---|
+| Python agent | Microsoft Foundry hosted agents | All production experiences. |
+| Chart artifacts | Private Azure Blob Storage | Images/downloads reachable by remote clients. |
+| Activity integration and app package | Azure Bot registration plus Teams/M365 app | Native cards and image cards in Microsoft 365 clients. |
+| Web/MCP gateway and built frontend | Separate authenticated HTTPS service | Custom web chat or MCP Apps. Not required for Activity. |
+
+### 1. Deploy the hosted agent to Foundry
+
+Follow the **[Foundry deployment runbook](docs/deployment.md)** for the complete
+Azure Developer CLI (`azd`) commands, configuration and role-assignment steps.
+
+1. Choose your existing Foundry project, tool-calling model deployment,
+   storage account and private chart container.
+2. Update `services.ai-project.endpoint` in [azure.yaml](azure.yaml) to **your
+   project**. The checked-in endpoint is an example, not a shared service.
+   Configure the matching endpoint, project ID and model in a separate
+   production azd environment; do not reuse the local `.env` as deployment
+   configuration.
+3. Set `CHARTS_DEV_MODE=false`, `ARTIFACT_MODE=blob`,
+   `AZURE_STORAGE_ACCOUNT_URL`, and `AZURE_STORAGE_CONTAINER`.
+4. Validate and deploy the `charts-agent` service. The configuration uses a
+   **Python 3.13 remote code build**; no local Docker or ACR build is required.
+5. Read the deployed agent's **runtime identity**
+   (`instance_identity.principal_id`). Grant **Storage Blob Data Contributor**
+   on the chart container and **Storage Blob Delegator** on the storage account
+   to that identity. It is created during the first deployment; do not
+   substitute the project's managed identity.
+6. Retrieve the active version and endpoints, then request a chart using a
+   fresh session. Check the returned images and labels before connecting clients.
+
+Only settings declared in `azure.yaml` under `environmentVariables` are
+explicitly forwarded to the deployed application. Add any intended runtime
+override there as well as in the production azd environment.
+
+### 2. Publish the Activity app to Teams and Microsoft 365 Copilot
+
+This path connects Microsoft 365 clients to the deployed agent's **Activity
+Protocol** through an Azure Bot registration. It does not require the MCP gateway.
+
+1. Follow the **Teams setup instructions generated by your deployment** for
+   the bot and channel configuration.
+2. Customize the [Activity app manifest](m365sideloadmanifest/manifest.json)
+   for your app/bot IDs, publisher details, policy URLs and required image
+   domains. Use your artifact host and any image-proxy hosts required by the
+   target client. Do not copy another deployment's identity settings.
+3. Follow the [sideload package guide](m365sideloadmanifest/README.md) to build
+   the ZIP containing the manifest and its two icons.
+4. Upload or distribute the package through your tenant's permitted app
+   process. Custom-app policies and administrator approval apply.
+5. Open the app in Teams or Copilot and request a native chart, a drill-down,
+   and an image-fallback chart.
+
+![Teams installation screen for Foundry Charts, showing the app description, Add button and starter prompts](docs/screenshots/teams-foundrychart-installationscreen.png)
+
+*Installing the app connects the client to the existing hosted agent; it does
+not deploy another agent. The app description, icons and conversation starters
+come from the manifest.*
+
+### 3. Host the custom web chat or MCP gateway
+
+Follow the [gateway hosting guide](gateway/README.md#hosting-distinction) and
+[gateway infrastructure runbook](infra/gateway/README.md).
+
+- Set `GATEWAY_MODE=foundry`, your `FOUNDRY_PROJECT_ENDPOINT`, and
+  `FOUNDRY_AGENT_NAME`. Set `FOUNDRY_AGENT_VERSION` when pinning a version.
+- Host the gateway and built web assets on a separate HTTPS service.
+  Deploying the agent does not publish this repository's `/mcp` or web routes.
+- Give the gateway's own managed identity the required project access.
+  Configure Entra authentication for incoming requests and the approved
+  origins for MCP widgets.
+- A production custom web client also needs a sign-in/token-acquisition
+  flow or backend-for-frontend. Do not expose the anonymous local demo publicly.
+
+The MCP Server URL is the **deployed gateway's HTTPS origin plus `/mcp`**,
+not the Foundry project endpoint or an image URL.
+
+### Copilot integration
+
+To expose the interactive widget through MCP Apps in Microsoft 365 Copilot,
+follow the **[Copilot MCP App guide](docs/m365-copilot-mcp-app.md)**.
+It covers the remote gateway, Entra/OAuth, host origins, plugin registration
+and tenant-side installation.
+
+The [MCP app package](appPackage/README.md) is a declarative-agent/MCP plugin
+wrapper, separate from the Activity app package above. It reuses the deployed
+Python agent. Check MCP Apps availability and the required permissions in
+your target tenant; installing the Activity app does not install this widget.
+
+## Technical guide and customization
+
+### Repository map
+
+| Area | Purpose |
 |---|---|
-| Direct Teams chat | Chart appears without navigation. |
-| Copilot inside Teams, using @mention in an existing work chat | Chart appears after a blink; client telemetry confirms post-completion card rendering. |
-| Standalone Copilot, using the dedicated agent chat | Chart still requires refresh; the capture has no corresponding post-completion card mapping/render event. |
+| [agent.py](src/charts_agent/agent.py) | Agent instructions, tools, caller context and deterministic response formatting. |
+| [contracts.py](src/charts_agent/contracts.py) | Validated query/chart requests, rows and the shared `ChartBundle`. |
+| [mock_data.py](src/charts_agent/mock_data.py) | Seeded sales database and mock HTTP schema/query API. |
+| [chart_service.py](src/charts_agent/chart_service.py) | Data access, rendering and artifact pipeline. |
+| [rendering.py](src/charts_agent/rendering.py) | Vega-Lite specifications, PNG/SVG rendering, Adaptive Card mapping and fallbacks. |
+| [artifact_storage.py](src/charts_agent/artifact_storage.py) | Local files or private Blob artifacts with signed URLs. |
+| [main.py](src/charts_agent/main.py), [activity_bridge.py](src/charts_agent/activity_bridge.py), [activity_delivery.py](src/charts_agent/activity_delivery.py) | Hosting, Activity conversation state, progress and final delivery. |
+| [gateway/](gateway/) | Web/MCP tools, upstream transport and gateway authentication. |
+| [web/src/](web/src/) | Shared interactive chart component, web chat and MCP App entry points. |
+| [tests/](tests/), [web/test/](web/test/) | Backend, protocol and frontend tests. |
 
-Both Copilot traces now show content arriving before completion. Their later
-async-message handling differs, but the captures also differ in entry point,
-conversation state and client state version: this is not a controlled
-host-only comparison or proof of a specific client bug. Test @mention and
-dedicated agent chat separately in both hosts, including fresh and subsequent
-turns. This remains separate from the resolved app-package 1.0.5 image-domain
-issue; further agent changes need correlated delivery evidence, not arbitrary
-timing delays.
+### Replace the mock data or add new content
 
-### Native chart and card-button drill-down
+The sample supports revenue, profit, units and orders, grouped or filtered by
+month, region, country, category, product and channel. Unknown dimensions,
+values and unsupported query shapes fail validation rather than returning
+guessed data.
 
-Ask **"Show revenue by region as a bar chart."** The Activity response uses a
-native `Chart.VerticalBar`, an accessible data preview, and **Explore** buttons:
+To connect your own backend:
 
-![M365 Agents Playground showing a native revenue-by-region Adaptive Card with Explore Americas, Explore Asia Pacific and Explore Europe buttons](docs/screenshots/playground-native-chart.png)
+1. Replace the schema/query implementation in `mock_data.py`, or point
+   `MOCK_API_URL` at a service implementing the same `/schema` and `/query`
+   contract. Local artifact mode also exposes the sample endpoints under `/mock`.
+2. Update the validated contracts and agent instructions for your domain.
+   Keep query validation and authorization at the data boundary.
+3. Preserve aggregate rows as the shared input to renderers and drill-down.
+   Add tests for valid queries, rejected inputs and empty results.
 
-Choose **Explore Europe**. The card's `Action.Submit` sends a new query through
-the agent and returns France and Germany, totaling **9,044,376.91**:
+To add a visualization, extend the chart contract, Vega-Lite builder and
+interactive controls as needed. Add a native-card mapping only when a host
+control preserves its meaning; otherwise keep the image fallback.
 
-![Detail of the native Playground drill-down card showing France and Germany within Europe](docs/screenshots/playground-europe-drilldown.png)
+For other dynamic content, reuse the same separation: **typed result ->
+static representation / card / interactive resource -> protocol formatter**.
+For example, a report or diagram can have an image fallback and a richer
+web/MCP view without duplicating its data-retrieval logic.
 
-*Live local captures from Playground 0.2.27. The overview uses a 1280 x 980
-desktop viewport at 2x pixel density; the detail is cropped for legibility.
-Open any screenshot at full size to inspect its labels.*
+### Protocol contracts
+
+- **Responses:** static output contains Markdown PNG/SVG links, not a custom
+  `output_image` response item. Middleware formats artifacts deterministically;
+  the model is not responsible for reproducing URLs or serialized chart data.
+- **Interactive Responses:** set `metadata.chart_output` to `"interactive"`.
+  The gateway parses the returned fenced `chart` payload as a `ChartBundle`.
+  For deterministic drill-down, `metadata.chart_request` contains a validated
+  `ChartRequest` serialized as a compact JSON string. It must fit the
+  **512-character metadata value limit**; larger selections need a different
+  contract, such as a server-side saved-query identifier.
+- **Activity:** sends a summary and Adaptive Card attachments. Card
+  `Action.Submit` actions request another aggregation through the agent.
+- **MCP Apps:** `get_chart` and `drill_chart` reference `ui://charts/app.html`,
+  served as `text/html;profile=mcp-app` with resource-level CSP metadata.
+  The widget uses the host's tool-call channel for drill-down.
+
+Caller metadata chooses **presentation, not permissions**. Never use an
+output-format flag as an authorization decision.
+
+### Why Vega-Lite?
+
+- The same declarative specification drives Python static rendering and
+  browser SVG rendering.
+- `vl-convert-python` produces PNG/SVG without a browser or Node rendering
+  server in the hosted agent.
+- The shared web component supports hover details and updates the returned
+  dataset for local filtering, without another agent call.
+- The MCP widget bundles its dependencies and uses **Vega's expression
+  interpreter**, avoiding CDNs and `unsafe-eval` in restrictive host sandboxes.
+- The generic `sans-serif` font works across browser and minimal hosted
+  environments; avoid relying on desktop fonts being installed on the server.
 
 ### Adaptive Card support is host-specific
 
-The mapper targets these eight Microsoft controls:
-
-| Request kind | Adaptive Card type |
+| Request kind | Native control |
 |---|---|
 | `bar` | `Chart.VerticalBar` |
 | `horizontal_bar` | `Chart.HorizontalBar` |
@@ -244,238 +508,53 @@ The mapper targets these eight Microsoft controls:
 | `donut` | `Chart.Donut` |
 | `gauge` | `Chart.Gauge` |
 
-Area, scatter and heatmap charts use static fallback. Additional semantic and sample payload-budget checks also trigger fallback rather than losing data. Each native chart has an element-level PNG `fallback` for renderers that do not recognize `Chart.*`.
+Area, scatter and heatmap requests use images in Activity. Semantic checks
+and payload budgets can also select image fallback to avoid dropping data.
+Native chart elements include a PNG `fallback` for renderers that do not
+recognize the control.
 
-**Adaptive Card v1.5 does not guarantee chart support.** The Microsoft chart controls are host extensions; generic card-schema validation alone cannot verify them. Playground may show the image fallback instead of a native chart, depending on its renderer. Verify final rendering in the intended Teams/Copilot client. This is deliberately not a claim that MCP Apps works over Activity.
+`Chart.*` controls are host extensions: **Adaptive Card schema version 1.5
+alone does not establish chart support**. Check the intended client, including
+its fallback and card-action behavior.
 
-#### Unsupported native chart: automatic image fallback
+### Live progress and long-running chart delivery
 
-Ask **"Show a heatmap of revenue by month and region for all regions."** There is
-no equivalent native Adaptive Card heatmap control, so the Activity response
-contains an image card with the shared PNG and an explicit fallback explanation:
+The Activity adapter reports real stages: schema discovery, querying,
+rendering and artifact preparation. It uses SDK streaming where supported
+and ordinary progress messages otherwise. Summary and chart attachments
+share one final outgoing Activity.
 
-![Playground image-card detail showing the monthly regional revenue heatmap and the explanation that no equivalent native Adaptive Card chart exists](docs/screenshots/playground-image-fallback.png)
+By default, work that exceeds **35 seconds** hands off to background delivery
+through a fresh authenticated connector. Keepalives run every **15 seconds**;
+the overall work deadline is **100 seconds**. Buffered `expectReplies` clients
+keep an inline result instead. See the [environment example](src/charts_agent/.env.example)
+for the timing settings.
 
-*The chart and explanation are shown here; the card also includes a data
-preview below this crop. This PNG has no client-side hover or filters.
-Compare it with the interactive rendering of the same heatmap below.*
+Turns serialize within a conversation; `/clear` cancels pending work and resets
+its history. The sample's background jobs and Activity history are **in-process**.
+For multi-replica or restart-safe operation, add durable jobs/history,
+conversation coordination and delivery deduplication.
 
-## Production in Teams via the Activity Protocol
+### Storage, identity, and production hardening
 
-The same agent also runs inside Teams against its **production Foundry
-deployment**, not just the local Playground. The Teams/M365 Copilot app
-references the Azure Bot registration connected to the hosted agent through
-the **Activity Protocol**. This path needs neither a Teams tab nor the separate
-MCP gateway.
+- Production artifacts use private Blob Storage with **read-only, HTTPS-only
+  user-delegation SAS** URLs. No account key or anonymous container is required.
+  The default URL lifetime is 60 minutes; plan for expiry in older messages,
+  artifact retention and cleanup. Do not log or publish signed URLs.
+- `ARTIFACT_TTL_MINUTES` supports 1-1440 minutes. Hosted overrides require
+  forwarding in `azure.yaml`; local `.env` values do not configure deployment.
+- Local artifact files persist until cleaned up. Foundry hosting rejects
+  development/local-artifact configuration; remote clients cannot use
+  localhost image URLs.
+- Gateway-to-Foundry authentication and user-to-gateway authentication are
+  separate. For real data, enforce tenant/user access at the query layer,
+  rather than relying on the gateway's service identity alone.
+- Add durable scoped conversation state, quotas, rate limits, audit/retention
+  policies and an appropriate network design before serving private business data.
 
-The integration flow is:
+### Development and verification
 
-1. **Deploy the hosted agent** using the [production runbook](docs/deployment.md)
-   and follow the generated [Teams setup instructions](src/charts_agent/TEAMS_APP_SETUP.md)
-   for its bot/channel configuration.
-2. **Package and install the app** using the [Teams/M365 sideload guide](m365sideloadmanifest/README.md).
-   The manifest must reference your deployed bot. Upload the ZIP through your
-   tenant's permitted custom-app flow, then choose **Add**.
-3. **Open Foundry Charts and ask for a chart.** Teams sends the conversation
-   through the Activity integration and renders the returned Adaptive Card.
-
-### Install the Teams/M365 Copilot app
-
-![Real Teams installation screen for Foundry Charts, showing its icon, description, Add button and sample conversation starters](docs/screenshots/teams-foundrychart-installationscreen.png)
-
-*The actual Teams installation screen for the Activity app. The icon,
-description and starter prompts come from the sideload manifest; installing
-this app connects the client to the existing hosted agent, rather than
-deploying another agent.*
-
-### Run a native Adaptive Card chart in production
-
-Ask **"Compare monthly 2025 revenue by region as a line chart."**
-
-![Foundry Charts running in production in Teams, displaying a native Adaptive Card line chart of monthly 2025 revenue by region with an Asia Pacific hover tooltip](docs/screenshots/teams-adaptivecard-linechart.png)
-
-*A real production Teams response using native `Chart.Line`, with the host's
-hover tooltip visible. This is not a static PNG fallback or the custom web
-SVG component. The backend is deployed in Foundry; the sales data remains
-synthetic. Open either screenshot at full size to inspect the details.*
-
-These captures demonstrate the Teams experience. On 2026-09-20, the developer
-also confirmed native Adaptive Card charts and PNG image cards working in
-M365 Copilot after installing app package **1.0.5**. A Copilot HAR independently
-verified successful PNG delivery. See the
-[verified image-domain configuration](m365sideloadmanifest/README.md#retest-copilot-chart-images-with-version-105);
-[renderer support remains host-specific](#adaptive-card-support-is-host-specific).
-
-## Web chat and MCP Apps
-
-The gateway supports two independent upstream modes:
-
-1. **Local:** forwards Responses calls to the local hosted process.
-2. **Foundry:** invokes a deployed hosted agent through the project's Responses endpoint with an `agent_reference`. It does not attempt to expose arbitrary container HTTP paths through the Foundry gateway.
-
-See [gateway configuration](gateway/.env.example) for the exact variables. For a deployed agent select Foundry mode, set the project endpoint and `FOUNDRY_AGENT_NAME` (and version if required). Run the gateway separately on a service suitable for public HTTP hosting; Foundry's protocol gateway is not a general-purpose web/MCP reverse proxy.
-
-Connect an MCP Apps-capable client to **http://127.0.0.1:8190/mcp** for local testing. `get_chart` and `drill_chart` reference `ui://charts/app.html`; the resource is served with `text/html;profile=mcp-app` and resource-level CSP metadata. Hosts without Apps support still receive useful text/structured tool results.
-
-For Claude Desktop, follow the [local MCP App setup](gateway/README.md#claude-desktop-local-mcp-app),
-including the Node/nvm fix if Desktop launches an older Node than your terminal.
-The gateway must already be running; the `mcp-remote` configuration does not start it.
-
-![Interactive chart rendered in Claude Desktop via the MCP App gateway](docs/screenshots/claude-interactive-mcpapp.png)
-
-To use the same MCP App in Microsoft 365 Copilot with the deployed Foundry agent,
-follow the [production gateway and Copilot walkthrough](docs/m365-copilot-mcp-app.md),
-including how to obtain the real MCP Server URL.
-
-The UI bundles its dependencies, uses SVG, and shares its rendering component between chat and the MCP widget. Local filters act on the returned aggregate rows without a model or API call; drill-down performs a new query through the hosted agent. Local filters therefore do not recover raw records that were never returned.
-
-### Interactive SVG in the custom web chat
-
-Ask **"Show revenue by region split by channel as a grouped bar chart."**
-Hovering over a mark shows its region, channel, revenue and units. The same
-component exposes filters, an SVG download, and a drill-down selector:
-
-![Custom web chat with an interactive grouped SVG chart, a Europe Retail hover tooltip, and Europe selected for country drill-down](docs/screenshots/web-interactive-overview.png)
-
-*Captured at 1440 x 1360 so the question, complete chart, tooltip and drill
-controls remain visible together. The following screenshots focus on the chart
-component, at approximately 1046 x 894 pixels.*
-
-#### Drill-down queries new data
-
-Select **Europe** under **Explore country within**, then choose **Drill down**.
-The gateway calls the hosted agent again, retaining the channel breakdown and
-filtering the new country query to Europe. The chart updates in place:
-
-![Interactive Europe country drill-down with France and Germany split by Online and Retail, including a Germany Retail tooltip](docs/screenshots/web-europe-drilldown.png)
-
-*Four returned groups: two countries, each split by two channels. Unlike local
-filtering, this drill-down retrieves a new aggregation from the mock database.*
-
-#### The heatmap stays interactive here
-
-In a new conversation, ask **"Show a heatmap of revenue by month and region."**
-Unlike the Activity image fallback above, the custom client renders all **36
-cells as SVG marks**, with hover details:
-
-![Interactive monthly regional revenue heatmap with a tooltip for June 2025 in Europe showing revenue and units](docs/screenshots/web-heatmap-hover.png)
-
-#### Filter locally without another agent call
-
-Open **Series** and deselect **Americas** and **Asia Pacific**, leaving **Europe**.
-The status changes to **12 of 36 data points · filters run locally**:
-
-![The same heatmap filtered to Europe's twelve months, with the Series checkboxes and local-filter status visible](docs/screenshots/web-local-filter.png)
-
-*The capture walkthrough verified 36 to 12 visible cells with **zero network
-requests** during filtering. Reset filters restores all returned rows. The
-summary above the chart continues to describe the original query's full
-dataset, not the currently visible subset.*
-
-These are screenshots of the running **custom web chat**, not mockups or
-Microsoft 365 Copilot captures. MCP Apps uses the same chart component; its
-host chrome and feature availability depend on the MCP client.
-
-### Copilot integration
-
-Follow the dedicated **[M365 Copilot MCP App guide](docs/m365-copilot-mcp-app.md)**
-to reuse the production Foundry agent with an interactive chart inside Copilot.
-It covers gateway hosting, retrieving the MCP Server URL, managed identity,
-Entra OAuth, widget CORS, app packaging, sideloading and verification.
-
-The MCP server is a **separately hosted HTTPS gateway**; its URL is the gateway
-origin plus `/mcp`, not a Foundry Responses/Activity endpoint. This integration
-uses a declarative-agent/MCP plugin, not the existing Activity bot package or a
-Teams tab.
-
-## Deployment and storage
-
-**Follow the [Foundry production deployment runbook](docs/deployment.md)** for
-first deployment and updates. It is the shared procedure for humans and coding
-agents, including exact environment setup, package inspection, scoped RBAC,
-fresh-session verification and troubleshooting.
-
-The [azure.yaml](azure.yaml) currently binds to the original author's existing
-Foundry project, has no model deployments to provision, and declares Responses
-and Activity. When targeting another project, update that project service
-endpoint and the production azd environment together. Do not provision just to
-test locally or silently deploy to the checked-in example target.
-
-The critical sequence is:
-
-1. Confirm the Azure target and use a **separate production azd environment**.
-   Preserve the local development `.env`; it is excluded from deployment.
-2. Configure Blob mode, disable dev mode, test the sample, and inspect the exact
-   ZIP against the service-root [.agentignore](src/charts_agent/.agentignore).
-   The Python 3.13 remote code build requires no local Docker/ACR build.
-3. Deploy `charts-agent` and read its actual version and
-   `instance_identity.principal_id`. The runtime identity is created during the
-   **first deployment**, so do not try to assign its roles beforehand.
-4. Before the first chart request, verify **Storage Blob Data Contributor** at
-   the chart-container scope and **Storage Blob Delegator** at the account scope
-   for that runtime identity, not the project managed identity. Allow RBAC
-   propagation; do not broaden access to work around an immediate failure.
-5. Verify `active` status and doctor checks, then invoke the new version over
-   Responses using **a new session and conversation**. Require actual PNG/SVG
-   links, download the images, and **view the PNG's title, axes and legend**.
-   HTTP 200 and a correct MIME type alone do not prove text rendered.
-
-On 2026-09-19, version 2 in `charts-prod` passed these production image checks
-and all 11 applicable doctor checks. The font fix also passed 58 targeted chart
-tests and a fontless Linux rendering check. This is a dated baseline, not a
-hard-coded version to deploy or invoke; discover the current version each time.
-
-Deployment and the authenticated remote MCP service are separate operations. The hosted process rejects development/local-artifact settings in a detected Foundry environment.
-
-Activity deployment also creates an Azure Bot registration and generates [Teams setup instructions](src/charts_agent/TEAMS_APP_SETUP.md). App packaging, tenant approval and channel acceptance remain separate steps; this is a bot integration, **not a Teams tab**.
-
-The [Teams/M365 sideload package](m365sideloadmanifest/README.md) provides the
-existing bot's manifest, six sample conversation starters, and original color
-and outline icons. Its builder checks icon pixels and creates a three-file ZIP.
-This custom-engine/Activity package is separate from the declarative-agent/MCP
-example in [appPackage](appPackage/); neither bypasses tenant sideloading policies.
-
-Blob images use read-only, HTTPS-only **user-delegation SAS** URLs with a default lifetime of 60 minutes. No storage account key or anonymous container is required. URLs will expire in old messages; storage retention/lifecycle rules and a refresh strategy are production decisions, not hidden guarantees in this sample. `ARTIFACT_TTL_MINUTES` supports 1–1440 minutes, but a hosted override also requires adding it to the service's forwarded `environmentVariables`; setting a local `.env` or azd value alone is insufficient. Local files persist under the ignored artifact directory and must be cleaned up when no longer needed.
-
-In production local artifact mode fails closed. Localhost image URLs cannot
-be used by remote M365 clients. The previously reported Copilot chart-display
-issue was resolved in the tested environment with app package **1.0.5**:
-`validDomains` includes both the Blob hostname and the observed Microsoft
-image-proxy hostname, `us-prod.asyncgw.teams.microsoft.com`. Native charts and
-PNG image cards now work in the developer's Copilot tests, without a hosted-agent
-redeployment or changes to Blob authentication. Follow the
-[sideload and image-domain checks](m365sideloadmanifest/README.md#retest-copilot-chart-images-with-version-105)
-and validate both output paths in your target tenant; other regions may use
-different proxy hosts.
-
-Foundry Toolkit Agent Inspector accepts HTTPS Blob image URLs, but still protects
-remote images behind **Load Remote Images**. Blob storage does not remove that
-privacy prompt. Never publish the generated SAS query strings in logs or source.
-When copying an image URL, copy only that URL, preserve its percent encoding,
-and exclude Markdown delimiters/the separate SVG link. Redeployment does not
-repair previously generated PNGs; request a fresh chart for a new artifact URL.
-
-### Optional evaluation suite
-
-An instruction-generated 15-case suite is configured in
-[eval.yaml](src/charts_agent/eval.yaml), using the existing `gpt-5.4-mini` deployment.
-Its goals cover request/filter/drill-down adherence, grounding in synthetic data,
-and caller-appropriate output. Generation is separate from execution: the
-production deployment does not automatically run a paid evaluation.
-
-Both generation jobs completed. Review the
-[15 generated cases](src/charts_agent/.foundry/datasets/charts-agent-smoke-1.0/charts-agent-smoke_dg.jsonl)
-and [rubric](src/charts_agent/.foundry/evaluators/charts-agent-smoke-v1.json)
-before running
-`azd ai agent eval run --environment charts-prod` when ready. The CLI finalizes
-its generation configuration before execution. Generated `candidate_response`
-values are synthetic examples, not verified agent outputs or ground truth.
-Default Responses cases do not
-replace Activity/M365 acceptance tests or interactive metadata/browser tests.
-
-The Activity example uses bounded **in-memory conversation history**; Responses history uses the host's default storage. Neither is advertised as durable across container replacement. For real business data, add tenant/user authorization at the query layer, a durable scoped history store, audit/retention policies, quotas and gateway rate limits. Do not reuse demo format-selection metadata as an authorization mechanism.
-
-## Development and verification
+Run from the repository root after setup:
 
 ```bash
 ./chartagent test
@@ -484,43 +563,40 @@ npm --prefix web test
 npm --prefix web run build
 ```
 
-VS Code tasks launch the agent and gateway; F5 can launch the Python agent directly or attach with Foundry Agent Inspector. The debugger uses this sample's virtual environment, not a globally selected interpreter.
+On Windows, use `./chartagent.ps1 test` and the tools under
+`src/charts_agent/.venv/Scripts/`. The Python launcher accepts pytest selectors.
+Automated tests cover data/query validation, chart formats and fallbacks,
+protocol formatting, Activity delivery, storage and gateway contracts without
+requiring live model calls.
 
-Automated tests exercise mock data/query validation, all chart kinds, SVG and PNG output, native-card shapes/fallbacks, Responses static/interactive/streaming formatting, caller isolation, Activity attachments, artifact persistence, and MCP/gateway contracts. They do not require a model call. Live local model and client checks are separate from tests; deployment and tenant-side Microsoft 365 acceptance still require your environment.
-
-Live verification in this workspace used the existing `gpt-5.4-mini` deployment:
-static Responses, streaming Responses, a follow-up Europe/country query, and
-Playground native bar charts, card-button drill-down and heatmap PNG fallback
-all completed successfully. Playground 0.2.27 rendered the native chart controls;
-it also logged its own chart-layout warnings in a narrow viewport.
-
-The custom chat rendered a 36-cell heatmap with accurate hover details. Filtering
-to Europe reduced it to 12 cells with **zero network requests**. A real MCP client
-initialized the gateway, discovered the chart tools, read the self-contained
-widget resource with its MIME/CSP metadata, and successfully called `drill_chart`
-through the hosted agent. Run the Python regressions with `./chartagent test`;
-the launcher uses the service-local virtual environment rather than an
-unrelated root `.venv` or global interpreter.
-
-All **6 JavaScript tests** and both UI builds also pass. The test-only MCP host
-harness verified the bundled widget under a restrictive CSP (including
-`connect-src 'none'`, no `unsafe-eval`), including the SDK handshake, SVG, hover,
-local filtering/reset and drill-down updates from the direct tool response.
-It makes no CDN requests. To repeat that browser check:
+For browser work, start the agent and gateway, then run the
+[local MCP host harness](web/test/README.md):
 
 ```bash
 npm --prefix web run test:mcp-host
 # Open http://127.0.0.1:8192
 ```
 
-This harness is excluded from production builds. It verifies the MCP Apps
-contract, not tenant-side acceptance in Microsoft 365 Copilot.
+The harness exercises the bundled widget in a restrictive iframe sandbox and
+is excluded from production builds. Test the installed experience in each
+intended client separately from unit tests.
+
+### Optional evaluation suite
+
+[eval.yaml](src/charts_agent/eval.yaml) provides an optional evaluation
+configuration for request adherence, data grounding and caller-appropriate
+output. Review its model/project settings and referenced datasets/evaluators
+before running it in your environment. Generated candidate responses are not
+ground truth; evaluation execution is separate from deployment and can incur
+model charges.
 
 ## References
 
-- [Blender agent architecture and launchers](https://github.com/davrous/blenderagent)
-- [Microsoft chart controls](https://learn.microsoft.com/microsoftteams/platform/task-modules-and-cards/cards/charts-in-adaptive-cards)
-- [Current Adaptive Cards chart reference](https://adaptivecards.microsoft.com/?topic=Chart.Donut)
+- [Microsoft Foundry hosted agents](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agents)
+- [Microsoft Foundry Agent Framework Responses/local-tools sample](https://github.com/microsoft-foundry/foundry-samples/tree/main/samples/python/hosted-agents/agent-framework/responses/02-tools), the starting point for this project's hosted-agent scaffold.
+- [Microsoft 365 Agents Playground](https://learn.microsoft.com/microsoft-365/agents-sdk/test-with-toolkit-project)
+- [Charts in Adaptive Cards](https://learn.microsoft.com/microsoftteams/platform/task-modules-and-cards/cards/charts-in-adaptive-cards) and [chart control reference](https://adaptivecards.microsoft.com/?topic=Chart.Donut)
 - [MCP Apps specification](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx)
 - [MCP Apps in Microsoft 365 Copilot](https://learn.microsoft.com/microsoft-365/copilot/extensibility/plugin-mcp-apps)
 - [Vega-Lite](https://vega.github.io/vega-lite/) and [vl-convert](https://github.com/vega/vl-convert)
+- [Blender hosted-agent sample](https://github.com/davrous/blenderagent), architectural inspiration for protocol-aware delivery and the development launchers.
