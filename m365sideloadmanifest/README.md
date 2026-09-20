@@ -70,27 +70,54 @@ The supplied privacy and terms URLs both point to the publisher's homepage;
 use real policy pages before a store submission. Do not invent identity or
 policy URLs to make a validator appear successful.
 
-## Retest Copilot chart images with version 1.0.4
+## Retest Copilot chart images with version 1.0.5
 
-The [manifest](manifest.json) now allows the deployed chart artifact hostname,
-`msdavrous.blob.core.windows.net`, in `validDomains`. Only this exact hostname
-is included: no wildcard, scheme, path or SAS query. Keep it aligned with the
-artifact storage host if you deploy to another account. This does not make
-the Blob container public or change SAS permissions or expiry.
+The [manifest](manifest.json) allows both observed image hosts in `validDomains`:
+
+- `msdavrous.blob.core.windows.net`: the original private chart artifact.
+- `us-prod.asyncgw.teams.microsoft.com`: the Microsoft image proxy hostname
+  present in the delivered Copilot card.
+
+Only these exact hostnames are included: no wildcard, scheme, path or SAS query.
+Keep the artifact hostname aligned with your storage account. Other tenants
+or regions may use a different proxy hostname; inspect their delivered card
+and diagnostics instead of broadly allowing all Microsoft domains.
+This does not make the Blob container public or change SAS permissions or expiry.
 
 Microsoft documents this allowlist requirement for images returned by
 [API plugins and declarative agents](https://learn.microsoft.com/microsoft-365/copilot/extensibility/api-plugin-adaptive-cards#add-domains-to-your-app-manifest).
-**Retest result (2026-09-19):** the developer reports that the image still does
-not display in M365 Copilot after this change. The allowlist update alone did
-not resolve the reported Activity/custom-engine issue. The installed package
-and client network diagnostics have not been independently inspected.
-The steps below remain useful for collecting a controlled reproduction.
+**Diagnostic result (2026-09-20):** version 1.0.4 allowed only the Blob host
+and did not fix rendering. A comparison of Teams and Copilot HAR captures
+found a successful Teams proxy request, but no corresponding Copilot image
+request. Copilot telemetry explicitly reports `ImageProxyUrlFetched` with
+`success: false` and **"Image URL is not in the app's valid domains"**.
+The delivered card contains the proxy URL, whose hostname was not allowlisted.
+
+**Verified result (2026-09-20):** version **1.0.5** adds that observed proxy
+hostname and resolves the reported issue in the tested Copilot environment.
+The follow-up HAR identifies package 1.0.5 and records:
+
+- An image-proxy GET returning **200**, `image/png`, **92,585 bytes**, **960 x 540**.
+- A successful **204** preflight allowing `https://copilot.cloud.microsoft`.
+- `ImageProxyUrlFetched` with `success: "true"` and no domain-rejection events
+  of that type in the capture.
+
+The captured PNG is byte-for-byte identical to the previously inspected
+heatmap. The developer confirms both visible PNG image cards and native
+Adaptive Card charts now work in Copilot. The supplied HAR verifies the
+heatmap/image path; native-chart recovery is separately user-confirmed.
+No hosted-agent redeployment or change to Blob authentication was needed.
+
+Keep the known-working exact-domain configuration. Wildcard matching and
+other regional proxy hosts have not been tested. These results establish
+this tenant/client configuration, not universal host or store acceptance.
+Use the following steps to reproduce the check for your deployment:
 
 1. Regenerate the package using the commands above, then upload
    [build/foundry-charts.zip](build/foundry-charts.zip) through the same custom
    app upload flow used for the existing agent. Update the existing app when
    offered; its app/bot IDs are unchanged.
-2. Confirm the installed package is **1.0.4**, then refresh/reopen Copilot.
+2. Confirm the installed package is **1.0.5**, then refresh/reopen Copilot.
    A local manifest edit does not update an already installed package.
 3. Start a new agent conversation and ask:
    **"Show a heatmap of 2025 revenue by month and region."**
@@ -98,9 +125,11 @@ The steps below remain useful for collecting a controlled reproduction.
    so this isolates the image path from native-chart compatibility.
 4. Check the fresh response in Copilot and Teams. Do not reuse an old chart
    message or SAS URL: old links can have expired.
-5. If Copilot still shows no image, record its client/build and package
-   version, a screenshot and sanitized diagnostics. Confirm that the fresh
-   PNG URL works directly, but do not share its SAS query in logs or issues.
+5. If Copilot still shows no image, check `ImageProxyUrlFetched` in client
+   diagnostics and whether the image request is now sent. Verify the installed
+   app's resolved `validDomains`, not only the local manifest or version label.
+   Record client/build, package version and a screenshot. Do not share raw HARs,
+   tokens, cookies or SAS query strings in public issues.
 
 No hosted-agent redeployment, new app registration or MCP gateway deployment
 is required for this manifest-only test.

@@ -305,6 +305,11 @@ Redact credentials and signed URLs before sharing log excerpts.
   tenant approval and sideloading are separate. Responses smoke tests do not
   prove Teams acceptance. Test native charts and PNG fallback through the
   Activity client; `azd ai agent invoke` does not support Activity.
+  Follow the [Copilot image-domain checks](../m365sideloadmanifest/README.md#retest-copilot-chart-images-with-version-105):
+  the tested app package 1.0.5 required both the original Blob hostname and
+  the observed Microsoft image-proxy hostname in `validDomains`. This
+  manifest-only change restored PNG and user-confirmed native-chart display
+  in Copilot; verify the actual proxy host and both outputs in your tenant.
 - **Web/MCP:** see [gateway hosting guidance](../gateway/README.md#hosting-distinction).
   Foundry does not expose the gateway's `/mcp` or web routes. Configure its
   independent hosting, HTTPS, Entra authentication and browser sign-in/BFF;

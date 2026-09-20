@@ -19,9 +19,12 @@ from m365sideloadmanifest.build_package import (
 ROOT = Path(__file__).resolve().parents[1] / "m365sideloadmanifest"
 
 
-def test_manifest_allows_only_the_production_chart_artifact_host():
+def test_manifest_allows_only_the_observed_chart_image_hosts():
     manifest = json.loads((ROOT / "manifest.json").read_bytes())
-    assert manifest["validDomains"] == ["msdavrous.blob.core.windows.net"]
+    assert manifest["validDomains"] == [
+        "msdavrous.blob.core.windows.net",
+        "us-prod.asyncgw.teams.microsoft.com",
+    ]
 
 
 @pytest.mark.parametrize("filter_type", range(5))

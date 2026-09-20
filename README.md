@@ -5,7 +5,7 @@ A Python **Microsoft Foundry Hosted Agent** that queries a deterministic, fictio
 | Caller | Output |
 |---|---|
 | Responses API (default) | A PNG image link plus a downloadable SVG |
-| Activity Protocol / M365 Agents Playground / Teams | Native Adaptive Card `Chart.*` controls when representable; otherwise a PNG image card |
+| Activity Protocol / M365 Agents Playground / Teams / M365 Copilot | Native Adaptive Card `Chart.*` controls when representable; otherwise a PNG image card |
 | Custom web chat | Interactive SVG, hover details, local filters and server-side drill-down |
 | MCP Apps host | The same interactive component, packaged as self-contained HTML and bound to an MCP tool |
 
@@ -195,6 +195,52 @@ contains an image card with the shared PNG and an explicit fallback explanation:
 preview below this crop. This PNG has no client-side hover or filters.
 Compare it with the interactive rendering of the same heatmap below.*
 
+## Production in Teams via the Activity Protocol
+
+The same agent also runs inside Teams against its **production Foundry
+deployment**, not just the local Playground. The Teams/M365 Copilot app
+references the Azure Bot registration connected to the hosted agent through
+the **Activity Protocol**. This path needs neither a Teams tab nor the separate
+MCP gateway.
+
+The integration flow is:
+
+1. **Deploy the hosted agent** using the [production runbook](docs/deployment.md)
+   and follow the generated [Teams setup instructions](src/charts_agent/TEAMS_APP_SETUP.md)
+   for its bot/channel configuration.
+2. **Package and install the app** using the [Teams/M365 sideload guide](m365sideloadmanifest/README.md).
+   The manifest must reference your deployed bot. Upload the ZIP through your
+   tenant's permitted custom-app flow, then choose **Add**.
+3. **Open Foundry Charts and ask for a chart.** Teams sends the conversation
+   through the Activity integration and renders the returned Adaptive Card.
+
+### Install the Teams/M365 Copilot app
+
+![Real Teams installation screen for Foundry Charts, showing its icon, description, Add button and sample conversation starters](docs/screenshots/teams-foundrychart-installationscreen.png)
+
+*The actual Teams installation screen for the Activity app. The icon,
+description and starter prompts come from the sideload manifest; installing
+this app connects the client to the existing hosted agent, rather than
+deploying another agent.*
+
+### Run a native Adaptive Card chart in production
+
+Ask **"Compare monthly 2025 revenue by region as a line chart."**
+
+![Foundry Charts running in production in Teams, displaying a native Adaptive Card line chart of monthly 2025 revenue by region with an Asia Pacific hover tooltip](docs/screenshots/teams-adaptivecard-linechart.png)
+
+*A real production Teams response using native `Chart.Line`, with the host's
+hover tooltip visible. This is not a static PNG fallback or the custom web
+SVG component. The backend is deployed in Foundry; the sales data remains
+synthetic. Open either screenshot at full size to inspect the details.*
+
+These captures demonstrate the Teams experience. On 2026-09-20, the developer
+also confirmed native Adaptive Card charts and PNG image cards working in
+M365 Copilot after installing app package **1.0.5**. A Copilot HAR independently
+verified successful PNG delivery. See the
+[verified image-domain configuration](m365sideloadmanifest/README.md#retest-copilot-chart-images-with-version-105);
+[renderer support remains host-specific](#adaptive-card-support-is-host-specific).
+
 ## Web chat and MCP Apps
 
 The gateway supports two independent upstream modes:
@@ -209,6 +255,8 @@ Connect an MCP Apps-capable client to **http://127.0.0.1:8190/mcp** for local te
 For Claude Desktop, follow the [local MCP App setup](gateway/README.md#claude-desktop-local-mcp-app),
 including the Node/nvm fix if Desktop launches an older Node than your terminal.
 The gateway must already be running; the `mcp-remote` configuration does not start it.
+
+![Interactive chart rendered in Claude Desktop via the MCP App gateway](docs/screenshots/claude-interactive-mcpapp.png)
 
 To use the same MCP App in Microsoft 365 Copilot with the deployed Foundry agent,
 follow the [production gateway and Copilot walkthrough](docs/m365-copilot-mcp-app.md),
@@ -324,7 +372,16 @@ example in [appPackage](appPackage/); neither bypasses tenant sideloading polici
 
 Blob images use read-only, HTTPS-only **user-delegation SAS** URLs with a default lifetime of 60 minutes. No storage account key or anonymous container is required. URLs will expire in old messages; storage retention/lifecycle rules and a refresh strategy are production decisions, not hidden guarantees in this sample. `ARTIFACT_TTL_MINUTES` supports 1–1440 minutes, but a hosted override also requires adding it to the service's forwarded `environmentVariables`; setting a local `.env` or azd value alone is insufficient. Local files persist under the ignored artifact directory and must be cleaned up when no longer needed.
 
-In production local artifact mode fails closed. Localhost image URLs cannot be used by remote M365 clients. The source context also reports a Copilot image-display regression; this sample cannot fix client/platform regressions, so validate image fallback in the target tenant.
+In production local artifact mode fails closed. Localhost image URLs cannot
+be used by remote M365 clients. The previously reported Copilot chart-display
+issue was resolved in the tested environment with app package **1.0.5**:
+`validDomains` includes both the Blob hostname and the observed Microsoft
+image-proxy hostname, `us-prod.asyncgw.teams.microsoft.com`. Native charts and
+PNG image cards now work in the developer's Copilot tests, without a hosted-agent
+redeployment or changes to Blob authentication. Follow the
+[sideload and image-domain checks](m365sideloadmanifest/README.md#retest-copilot-chart-images-with-version-105)
+and validate both output paths in your target tenant; other regions may use
+different proxy hosts.
 
 Foundry Toolkit Agent Inspector accepts HTTPS Blob image URLs, but still protects
 remote images behind **Load Remote Images**. Blob storage does not remove that
