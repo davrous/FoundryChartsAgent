@@ -4,6 +4,15 @@ Build a **Python Microsoft Foundry hosted agent** that turns natural-language
 questions into charts, lets users explore the underlying data, and delivers
 the right experience for each client.
 
+## Watch the demo: Foundry + M365: Beyond Static Charts
+
+See the agent in action: static images through the Responses API, Adaptive Cards
+in Teams and Microsoft 365 Copilot, and interactive SVG charts in the custom web
+chat and in Microsoft 365 Copilot through a declarative agent with MCP Apps
+integration. **Click the thumbnail below to watch on YouTube.**
+
+[![Watch Foundry + M365: Beyond Static Charts on YouTube](https://img.youtube.com/vi/i0YYFLNNSTM/hqdefault.jpg)](https://youtu.be/i0YYFLNNSTM)
+
 The sample queries a fictional sales database through a mock HTTP API. Users
 can ask for an overview, compare metrics, and drill from regions into countries
 or from categories into products. A shared chart result becomes a static image,
