@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Preview in Copilot (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "https://m365.cloud.microsoft/chat/?titleId=${agent-hint}&source=agents-toolkit",
+      "presentation": {
+        "group": "remote",
+        "order": 1
+      },
+      "internalConsoleOptions": "neverOpen",
+      "runtimeArgs": ["--remote-debugging-port=9222", "--no-first-run"]
+    },
+    {
+      "name": "Preview in Copilot (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "https://m365.cloud.microsoft/chat/?titleId=${agent-hint}&source=agents-toolkit",
+      "presentation": {
+        "group": "remote",
+        "order": 2
+      },
+      "internalConsoleOptions": "neverOpen",
+      "runtimeArgs": ["--remote-debugging-port=9223", "--no-first-run"]
+    }
+  ]
+}

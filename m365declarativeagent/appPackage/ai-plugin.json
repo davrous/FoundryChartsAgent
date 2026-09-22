@@ -1,0 +1,97 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+    "schema_version": "v2.4",
+    "name_for_human": "Foundry Charts DA",
+    "description_for_human": "Analyze synthetic 2025 sales and display interactive charts from the Foundry Charts MCP App.",
+    "description_for_model": "Use get_chart before answering every sales or dataset question, including totals, comparisons, explanations, and follow-ups without an explicit chart request. The MCP server is the source of truth and returns the interactive MCP App. Use drill_chart only with a complete request from a returned chart. Never substitute invented data, HTML code, or Markdown images for the tool's interactive UI.",
+    "contact_email": "davrous@microsoft.com",
+    "namespace": "lrsr55b881",
+    "functions": [
+        {
+            "name": "get_chart",
+            "description": "Use this function for every natural-language sales/data question, analysis, or chart request. Ask for analysis and an interactive chart. For follow-ups pass the latest response_id returned by this function as previous_response_id. Also use it for totals, explanations, filters, and chart-type changes."
+        },
+        {
+            "name": "drill_chart",
+            "description": "Use this function only for a structured drill-down with the complete charts[].request from an actual tool result, preserving unchanged settings. The MCP App also calls it for interactive drill-downs. For natural-language requests or missing request objects, use get_chart instead."
+        }
+    ],
+    "runtimes": [
+        {
+            "type": "RemoteMCPServer",
+            "spec": {
+                "url": "https://zxvhhvl6-8190.uks1.devtunnels.ms/mcp",
+                "mcp_tool_description": {
+                    "tools": [
+                        {
+                            "name": "get_chart",
+                            "description": "Ask the hosted sales agent for charts. Follow up with previous_response_id for continuity.",
+                            "inputSchema": {
+                                "properties": {
+                                    "message": {
+                                        "title": "Message",
+                                        "type": "string"
+                                    },
+                                    "previous_response_id": {
+                                        "anyOf": [
+                                            { "type": "string" },
+                                            { "type": "null" }
+                                        ],
+                                        "default": null,
+                                        "title": "Previous Response Id"
+                                    }
+                                },
+                                "required": ["message"],
+                                "title": "get_chartArguments",
+                                "type": "object"
+                            },
+                            "outputSchema": {
+                                "additionalProperties": true,
+                                "title": "get_chartDictOutput",
+                                "type": "object"
+                            },
+                            "_meta": {
+                                "ui": {
+                                    "resourceUri": "ui://charts/app.html"
+                                }
+                            }
+                        },
+                        {
+                            "name": "drill_chart",
+                            "description": "Render a validated ChartRequest via the hosted agent; never runs a separate chart engine.",
+                            "inputSchema": {
+                                "properties": {
+                                    "request": {
+                                        "additionalProperties": true,
+                                        "title": "Request",
+                                        "type": "object"
+                                    }
+                                },
+                                "required": ["request"],
+                                "title": "drill_chartArguments",
+                                "type": "object"
+                            },
+                            "outputSchema": {
+                                "additionalProperties": true,
+                                "title": "drill_chartDictOutput",
+                                "type": "object"
+                            },
+                            "_meta": {
+                                "ui": {
+                                    "resourceUri": "ui://charts/app.html"
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            "run_for_functions": [
+                "get_chart",
+                "drill_chart"
+            ],
+            "auth": {
+                "type": "None"
+            }
+        }
+    ]
+}

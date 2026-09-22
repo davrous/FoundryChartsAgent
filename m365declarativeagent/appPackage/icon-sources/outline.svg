@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <title>Foundry Charts DA</title>
+  <g transform="scale(.72)" fill="#FFFFFF">
+    <rect x="2" y="22" width="6" height="10" rx="1"/>
+    <rect x="12.5" y="16" width="7" height="16" rx="1"/>
+    <rect x="23" y="10" width="7" height="22" rx="1"/>
+    <path d="M1 17 11 7 18 11 31 1" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g fill="none" stroke="#FFFFFF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M16 31V25H18C23 25 23 31 18 31Z"/>
+    <path d="M25 31 28 25 31 31M26 29H30"/>
+  </g>
+</svg>

@@ -409,8 +409,16 @@ not the Foundry project endpoint or an image URL.
 
 ### Copilot integration
 
+For a short-lived **development-only** test with a local agent, use the
+[Foundry Charts DA Toolkit project](m365declarativeagent/README.md).
+Its walkthrough runs `chartagent dev`, `chartagent web`, and
+`devtunnel host -p 8190 -a` in separate terminals, then points the declarative
+agent at the tunnel's `/mcp` endpoint. The `-a` tunnel permits anonymous public
+access: use synthetic data only, monitor usage, and stop it after testing.
+This is not the production authentication/deployment path.
+
 To expose the interactive widget through MCP Apps in Microsoft 365 Copilot,
-follow the **[Copilot MCP App guide](docs/m365-copilot-mcp-app.md)**.
+in production, follow the **[Copilot MCP App guide](docs/m365-copilot-mcp-app.md)**.
 It covers the remote gateway, Entra/OAuth, host origins, plugin registration
 and tenant-side installation.
 
@@ -433,6 +441,7 @@ your target tenant; installing the Activity app does not install this widget.
 | [artifact_storage.py](src/charts_agent/artifact_storage.py) | Local files or private Blob artifacts with signed URLs. |
 | [main.py](src/charts_agent/main.py), [activity_bridge.py](src/charts_agent/activity_bridge.py), [activity_delivery.py](src/charts_agent/activity_delivery.py) | Hosting, Activity conversation state, progress and final delivery. |
 | [gateway/](gateway/) | Web/MCP tools, upstream transport and gateway authentication. |
+| [m365declarativeagent/](m365declarativeagent/) | Standalone Toolkit declarative agent, DA icons, and development-tunnel setup for Copilot MCP Apps. |
 | [web/src/](web/src/) | Shared interactive chart component, web chat and MCP App entry points. |
 | [tests/](tests/), [web/test/](web/test/) | Backend, protocol and frontend tests. |
 

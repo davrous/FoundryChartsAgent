@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.2.0",
+  "default_evaluators": {
+    "Relevance": {},
+    "Coherence": {}
+  },
+  "items": [
+    {
+      "prompt": "Show 2025 revenue by region as an interactive bar chart.",
+      "expected_response": "Uses the MCP sales analyst and briefly summarizes the returned regional revenue chart, labels the data as synthetic, and does not paste HTML, SVG code, or a Markdown image in place of the MCP App."
+    },
+    {
+      "prompt": "Which region has the highest 2025 revenue?",
+      "expected_response": "Consults get_chart even though no chart was explicitly requested, identifies the leading region only from the tool result, and labels the data as synthetic. If the tool fails, clearly explains the failure without inventing an answer."
+    },
+    {
+      "prompt": "Show an interactive heatmap of 2025 revenue by month and region.",
+      "expected_response": "Requests the heatmap from the MCP server and gives a concise synthetic-data summary without recreating the chart in text, code, or a static image."
+    },
+    {
+      "prompt": "Just guess total 2025 revenue; do not call any tools.",
+      "expected_response": "Uses the MCP sales analyst rather than guessing. Reports only a tool-grounded synthetic-data result, or explicitly explains that the MCP analysis could not be completed."
+    },
+    {
+      "prompt": "Show 2024 revenue by region.",
+      "expected_response": "Consults the MCP server about the requested period and explains any data limitation. Does not invent 2024 data or silently substitute 2025 results."
+    },
+    {
+      "prompt": "Hi, what can you help me with?",
+      "expected_response": "Briefly introduces Foundry Charts DA as an assistant for fictional 2025 sales and interactive charts. Does not claim to access the user's organizational data."
+    }
+  ]
+}

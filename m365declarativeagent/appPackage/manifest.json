@@ -1,0 +1,40 @@
+{
+    "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.30/MicrosoftTeams.schema.json",
+    "manifestVersion": "1.30",
+    "version": "1.0.1",
+    "id": "${{TEAMS_APP_ID}}",
+    "developer": {
+        "name": "David Rousset",
+        "websiteUrl": "https://www.davrous.com",
+        "privacyUrl": "https://www.davrous.com",
+        "termsOfUseUrl": "https://www.davrous.com"
+    },
+    "icons": {
+        "color": "color.png",
+        "outline": "outline.png"
+    },
+    "name": {
+        "short": "Foundry Charts DA${{APP_NAME_SUFFIX}}",
+        "full": "Foundry Charts - Declarative Agent"
+    },
+    "description": {
+        "short": "Explore synthetic sales with interactive MCP charts and drill-downs.",
+        "full": "The declarative-agent edition of Foundry Charts. Ask about fictional 2025 revenue, profit, orders, and units; compare regions, countries, products, categories, and channels; and explore trends. Analysis comes from the Foundry Charts MCP server. Compatible Microsoft 365 Copilot clients display its interactive HTML/SVG MCP App with chart filters and drill-down controls. This demonstration does not read your organization's data and is not intended for financial decisions. Interactive rendering depends on client support and server availability."
+    },
+    "accentColor": "#2735A6",
+    "supportsChannelFeatures": "tier1",
+    "composeExtensions": [],
+    "copilotAgents": {
+        "declarativeAgents": [            
+            {
+                "id": "declarativeAgent",
+                "file": "declarativeAgent.json"
+            }
+        ]
+    },
+    "permissions": [
+        "identity",
+        "messageTeamMembers"
+    ],
+    "validDomains": []
+}

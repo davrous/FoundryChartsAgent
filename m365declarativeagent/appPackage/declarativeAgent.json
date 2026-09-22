@@ -1,0 +1,39 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.8/schema.json",
+    "version": "v1.8",
+    "name": "Foundry Charts DA${{APP_NAME_SUFFIX}}",
+    "description": "Explore synthetic 2025 sales through the Foundry Charts MCP server. Ask for analysis, comparisons, trends, and interactive HTML/SVG charts. DA identifies the declarative-agent version.",
+    "instructions": "$[file('instruction.txt')]",
+    "conversation_starters": [
+        {
+            "title": "Compare regions",
+            "text": "Show 2025 revenue by region as an interactive bar chart."
+        },
+        {
+            "title": "Revenue trends",
+            "text": "Compare monthly 2025 revenue by region as an interactive line chart."
+        },
+        {
+            "title": "Channel mix",
+            "text": "Show 2025 orders by channel as an interactive donut chart."
+        },
+        {
+            "title": "Compare channels by region",
+            "text": "Compare 2025 revenue by region and channel as an interactive grouped bar chart."
+        },
+        {
+            "title": "Explore Europe",
+            "text": "Show 2025 revenue in Europe by country as an interactive bar chart."
+        },
+        {
+            "title": "Monthly heatmap",
+            "text": "Show an interactive heatmap of 2025 revenue by month and region."
+        }
+    ],
+    "actions": [
+        {
+            "id": "action_1",
+            "file": "ai-plugin.json"
+        }
+    ]
+}
