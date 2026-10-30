@@ -20,6 +20,8 @@ from agent import CALLER, Caller, create_agent  # noqa: E402
 from artifact_storage import ArtifactStore  # noqa: E402
 from chart_service import ChartService  # noqa: E402
 from contracts import ChartRequest  # noqa: E402
+from file_inputs import responses_file  # noqa: E402
+from tabular import FileInputError, MAX_FILE_BODY_BYTES  # noqa: E402
 
 
 class CallerMiddleware:
@@ -36,8 +38,8 @@ class CallerMiddleware:
             if event["type"] == "http.disconnect":
                 return
             body.extend(event.get("body", b""))
-            if len(body) > 128_000:
-                await JSONResponse({"error": "Request exceeds sample's 128KB budget"}, 413)(scope, receive, send)
+            if len(body) > MAX_FILE_BODY_BYTES:
+                await JSONResponse({"error": "Request exceeds the 1.5 MB file-input budget"}, 413)(scope, receive, send)
                 return
             if not event.get("more_body"):
                 break
@@ -55,9 +57,23 @@ class CallerMiddleware:
             request = ChartRequest.model_validate_json(structured) if structured else None
             if structured and len(structured) > 512:
                 raise ValueError("chart_request exceeds the Responses metadata value limit of 512 characters")
-            caller = Caller(output=mode, request=request)
+            table = await responses_file(payload)
+            if table is None and len(body) > 128_000:
+                await JSONResponse({"error": "Request exceeds sample's 128KB budget"}, 413)(scope, receive, send)
+                return
+            if table is not None and request is not None:
+                raise FileInputError("File uploads cannot be combined with a mock-database drill-down request.")
+            caller = Caller(output=mode, request=request, table=table)
+            if table is not None:
+                body = bytearray(json.dumps(payload).encode("utf-8"))
+                scope = {**scope, "headers": [
+                    (key, value) for key, value in scope.get("headers", []) if key.lower() != b"content-length"
+                ]}
         except (ValueError, TypeError, ValidationError) as error:
-            await JSONResponse({"error": str(error)}, 422)(scope, receive, send)
+            message = str(error) if isinstance(error, FileInputError) else "Invalid Responses metadata or file input."
+            logging.getLogger(__name__).warning("Rejected Responses input (%s)", type(error).__name__)
+            code = "file_input_invalid" if isinstance(error, FileInputError) else "invalid_request"
+            await JSONResponse({"error": message, "error_code": code}, 422)(scope, receive, send)
             return
         replayed = False
 

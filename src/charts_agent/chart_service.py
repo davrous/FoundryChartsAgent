@@ -5,10 +5,11 @@ from uuid import uuid4
 import httpx
 
 from artifact_storage import ArtifactStore
-from contracts import ChartBundle, ChartRequest, ChartRow
+from contracts import ChartBundle, ChartInput, ChartRequest, ChartRow, FileChartRequest
 from mock_data import create_mock_app
 from progress import report_progress
 from rendering import adaptive_card, render_chart
+from tabular import Table
 
 
 class ChartService:
@@ -39,6 +40,14 @@ class ChartService:
         rows = [ChartRow.model_validate(row) for row in payload["rows"]]
         if not rows:
             raise ValueError("No mock sales match these filters. Choose values from get_data_schema.")
+        return await self._render(request, rows, payload["summary"])
+
+    async def create_file(self, request: FileChartRequest, table: Table) -> ChartBundle:
+        await report_progress("Aggregating the uploaded table...")
+        rows, summary = table.query(request.query)
+        return await self._render(request, rows, summary)
+
+    async def _render(self, request: ChartInput, rows: list[ChartRow], summary: str) -> ChartBundle:
         async with self.render_slots:
             await report_progress("Rendering your chart...")
             rendered = await asyncio.to_thread(render_chart, request, rows)
@@ -47,7 +56,7 @@ class ChartService:
         images = await self.artifacts.save(chart_id, rendered.png, rendered.svg)
         card, supported, reason = adaptive_card(request, rows, images["png"])
         return ChartBundle(
-            id=chart_id, request=request, title=request.title, summary=payload["summary"],
+            id=chart_id, request=request, title=request.title, summary=summary,
             rows=rows, vega_lite=rendered.spec, images=images,
             adaptive_card=card, adaptive_supported=supported, fallback_reason=reason,
         )

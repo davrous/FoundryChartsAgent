@@ -30,6 +30,38 @@ class ChartRequest(BaseModel):
     target: float = Field(default=1_000_000, gt=0, allow_inf_nan=False)
 
 
+class FileInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str = Field(min_length=1, max_length=120, pattern=r"^[^/\\\x00-\x1f]+$")
+    file_data: str = Field(min_length=1, max_length=1_334_000)
+
+
+class FileQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    metric: str = Field(min_length=1, max_length=64)
+    group_by: str = Field(min_length=1, max_length=64)
+    series: str | None = Field(default=None, min_length=1, max_length=64)
+    aggregation: Literal["sum", "mean", "min", "max", "count"] = "sum"
+    filters: dict[str, list[str]] = Field(default_factory=dict, max_length=30)
+
+
+class FileChartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["file"] = "file"
+    kind: Literal[
+        "bar", "horizontal_bar", "grouped_bar", "stacked_bar", "line",
+        "area", "pie", "donut", "heatmap",
+    ] = "bar"
+    title: str = Field(default="Uploaded data", min_length=1, max_length=120)
+    query: FileQuery
+
+
+ChartInput = ChartRequest | FileChartRequest
+
+
 class ChartRow(BaseModel):
     x: str
     y: float = Field(allow_inf_nan=False)
@@ -39,7 +71,7 @@ class ChartRow(BaseModel):
 
 class ChartBundle(BaseModel):
     id: str
-    request: ChartRequest
+    request: ChartInput
     title: str
     summary: str
     rows: list[ChartRow]

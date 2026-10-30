@@ -8,6 +8,15 @@ no separate or conflicting MCP dependency stack is maintained. The lock includes
 MCP 1.30.0, Starlette, Uvicorn, httpx, PyJWT/cryptography, python-dotenv,
 Pydantic, Azure Identity/Projects, and OpenAI.
 
+The web chat accepts one CSV/XLSX attachment through `POST /api/chat`:
+`{"message": "...", "file": {"filename": "data.csv", "file_data": "data:text/csv;base64,..."}}`.
+The optional `previous_response_id` works as before. File requests have a
+1.5 MB JSON-body budget; ordinary chat/drill requests retain their smaller
+limits. The gateway forwards a standard Responses `input_file` without
+decoding it; the agent validates and aggregates the table. The browser
+reattaches the selected file for each follow-up. MCP tools do not add a
+separate upload API. See [file inputs and limitations](../README.md#analyze-a-csv-or-excel-file).
+
 Run from the repository root after the parent's Python dependency setup:
 
 ```bash

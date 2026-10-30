@@ -17,7 +17,9 @@ from pydantic import ValidationError
 from activity_delivery import ActivityDelivery
 from agent import CALLER, Caller
 from contracts import ChartRequest
+from file_inputs import FILE_NOTICE, activity_file
 from progress import PROGRESS
+from tabular import FileInputError, Table
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,7 @@ class Conversation:
     history: list[dict[str, str]] | None = None
     generation: int = 0
     tasks: set[asyncio.Task[None]] = field(default_factory=set)
+    table: Table | None = None
 
 
 class ActivityTurns:
@@ -76,6 +79,7 @@ class ActivityTurns:
             activity.conversation.tenant_id or "",
             activity.conversation.id,
             (activity.recipient.id or "") if activity.recipient else "",
+            (activity.from_property.id or "") if activity.from_property else "",
         )
         if key not in self.conversations:
             if len(self.conversations) >= 128:
@@ -94,6 +98,7 @@ class ActivityTurns:
         if prompt.strip().lower() == "/clear":
             slot.generation += 1
             slot.history = []
+            slot.table = None
             for task in list(slot.tasks):
                 task.cancel()
             await asyncio.gather(*list(slot.tasks), return_exceptions=True)
@@ -112,6 +117,8 @@ class ActivityTurns:
                 await delivery.finish("The drill-down request is invalid. Request a new chart.", [])
                 return
             prompt = f"Render this drill-down: {caller.request.model_dump_json()}"
+        if not prompt.strip() and context.activity.attachments:
+            prompt = "Analyze the uploaded table and create a useful chart."
         if not prompt.strip():
             await delivery.finish("Ask for a chart, for example: revenue by region.", [])
             return
@@ -156,6 +163,14 @@ class ActivityTurns:
                     if generation != slot.generation:
                         await delivery.finish("This request was cancelled by /clear.", [])
                         return
+                    if context.activity.attachments:
+                        table = await activity_file(context.activity.attachments)
+                        if table is not None:
+                            slot.table = table
+                            slot.history = []
+                    caller.table = slot.table
+                    if caller.table is not None and caller.request is None:
+                        prompt += "\n\n" + FILE_NOTICE
                     history = list(
                         slot.history if slot.history is not None
                         else state.conversation.get_value("chart_history") or []
@@ -178,9 +193,14 @@ class ActivityTurns:
                         )},
                     ])
                     slot.history = history[-12:]
-                    state.conversation.set_value("chart_history", slot.history)
+                    if caller.table is None:
+                        state.conversation.set_value("chart_history", slot.history)
                     # Detached work finishes after AgentApplication's automatic state save.
                     await state.save(context, force=True)
+        except FileInputError as error:
+            logger.warning("Activity file input rejected")
+            if not delivery.finished:
+                await delivery.finish(str(error), [])
         except TimeoutError:
             logger.error("Activity chart turn exceeded its work deadline")
             if not delivery.finished:

@@ -5,6 +5,15 @@ Copilot, not the separate declarative-agent/MCP example in
 [appPackage](../appPackage/). It references the existing deployed bot; no Teams
 tab or extra hosting is added.
 
+Version **1.0.6** updates the description/disclaimer for optional CSV/XLSX
+input without changing app/bot identities. `supportsFiles` remains enabled.
+This manifest does not deploy the new runtime or enable Graph access.
+Teams direct file uploads are personal-chat-only; Copilot, channel, and group
+experiences require the host to deliver a supported download link. See the
+[file input walkthrough and limits](../README.md#analyze-a-csv-or-excel-file).
+Rebuild and reinstall the package only after deploying the file-aware agent
+and verifying the actual target bot identity and tenant experience.
+
 The six natural-language starters are in `bots[].commandLists`, scoped to
 personal, team, group chat and Copilot. Their descriptions contain the complete
 prompts sent to the agent by M365; titles provide the user-facing labels.

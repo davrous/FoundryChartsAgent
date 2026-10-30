@@ -8,7 +8,7 @@ from typing import Any
 
 import vl_convert as vlc
 
-from contracts import ChartRequest, ChartRow
+from contracts import ChartInput, ChartRow, FileChartRequest
 
 SAMPLE_CARD_BYTE_BUDGET = 20 * 1024
 SAMPLE_NATIVE_POINT_BUDGET = 80
@@ -33,14 +33,16 @@ class RenderedChart:
     svg: str
 
 
-def _has_series(request: ChartRequest, rows: list[ChartRow]) -> bool:
+def _has_series(request: ChartInput, rows: list[ChartRow]) -> bool:
     return request.query.series is not None or len({row.series for row in rows}) > 1
 
 
-def _static_reason(request: ChartRequest, rows: list[ChartRow]) -> str | None:
+def _static_reason(request: ChartInput, rows: list[ChartRow]) -> str | None:
     kind = request.kind
     if kind not in NATIVE_TYPES:
         return f"{kind.title()} has no equivalent native Adaptive Card chart; using the shared PNG."
+    if isinstance(request, FileChartRequest) and kind == "line":
+        return "Uploaded-data line charts use the shared PNG to preserve the file's category labels."
     if not rows:
         return "No matching data; using the shared empty-state image."
     if len(rows) > SAMPLE_NATIVE_POINT_BUDGET:
@@ -56,14 +58,14 @@ def _static_reason(request: ChartRequest, rows: list[ChartRow]) -> str | None:
         return f"Native {kind} cannot represent negative values; using the shared signed-value image."
     if kind in {"pie", "donut"} and sum(row.y for row in rows) <= 0:
         return "A pie or donut needs a positive total; using a zero-value bar image."
-    if kind == "gauge" and sum(row.y for row in rows) > request.target:
+    if kind == "gauge" and not isinstance(request, FileChartRequest) and sum(row.y for row in rows) > request.target:
         return "The total exceeds the gauge target; using an unclipped bar image with the target marked."
     if len({(row.x, row.series) for row in rows}) != len(rows):
         return "Repeated category/series pairs cannot be represented faithfully by the native chart."
     return None
 
 
-def build_spec(request: ChartRequest, rows: list[ChartRow]) -> dict[str, Any]:
+def build_spec(request: ChartInput, rows: list[ChartRow]) -> dict[str, Any]:
     """Build a pure, self-contained Vega-Lite v6 spec using v5-compatible marks."""
     if len(rows) > SAMPLE_RENDER_POINT_BUDGET:
         raise ValueError("Too many rows for the sample rendering budget; narrow the query.")
@@ -73,7 +75,10 @@ def build_spec(request: ChartRequest, rows: list[ChartRow]) -> dict[str, Any]:
     values = [row.model_dump() for row in rows]
     spec: dict[str, Any] = {
         "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-        "description": f"{request.title}. Synthetic sales, {metric} by {dimension}.",
+        "description": (
+            f"{request.title}. Uploaded file, {request.query.aggregation} of {metric} by {dimension}."
+            if isinstance(request, FileChartRequest) else f"{request.title}. Synthetic sales, {metric} by {dimension}."
+        ),
         "width": 960,
         "height": 540,
         "autosize": {"type": "fit", "contains": "padding"},
@@ -96,6 +101,8 @@ def build_spec(request: ChartRequest, rows: list[ChartRow]) -> dict[str, Any]:
         {"field": "y", "type": "quantitative", "title": metric, "format": ",.2f"},
         {"field": "units", "type": "quantitative", "title": "Units", "format": ",.0f"},
     ]
+    if isinstance(request, FileChartRequest):
+        tooltip = [item for item in tooltip if item["field"] != "units"]
     if not rows:
         spec["title"]["subtitle"] = "No data matches the selected filters."
         spec["mark"] = {"type": "text", "fontSize": 18, "color": "#475569"}
@@ -109,7 +116,7 @@ def build_spec(request: ChartRequest, rows: list[ChartRow]) -> dict[str, Any]:
     invalid_arc = kind in {"pie", "donut"} and (
         any(row.y < 0 for row in rows) or sum(row.y for row in rows) <= 0
     )
-    invalid_gauge = kind == "gauge" and (
+    invalid_gauge = kind == "gauge" and not isinstance(request, FileChartRequest) and (
         has_series or any(row.y < 0 for row in rows) or sum(row.y for row in rows) > request.target
     )
     if invalid_arc or invalid_gauge:
@@ -177,7 +184,7 @@ def build_spec(request: ChartRequest, rows: list[ChartRow]) -> dict[str, Any]:
             color={**measure, "scale": {"scheme": "blueorange", "domainMid": 0}}
             if any(row.y < 0 for row in rows) else {**measure, "scale": {"scheme": "blues"}},
         )
-    elif kind == "gauge":
+    elif kind == "gauge" and not isinstance(request, FileChartRequest):
         spec["transform"] = [
             {"aggregate": [{"op": "sum", "field": "y", "as": "total"}]},
             {"calculate": str(request.target), "as": "target"},
@@ -202,7 +209,7 @@ def build_spec(request: ChartRequest, rows: list[ChartRow]) -> dict[str, Any]:
         ]
         return spec
     spec["encoding"] = encoding
-    if invalid_gauge:
+    if invalid_gauge and not isinstance(request, FileChartRequest):
         mark = spec.pop("mark")
         spec.pop("encoding")
         spec["layer"] = [
@@ -217,7 +224,7 @@ def build_spec(request: ChartRequest, rows: list[ChartRow]) -> dict[str, Any]:
     return spec
 
 
-def render_chart(request: ChartRequest, rows: list[ChartRow]) -> RenderedChart:
+def render_chart(request: ChartInput, rows: list[ChartRow]) -> RenderedChart:
     """Render the exact same spec locally, without fetching remote data or images."""
     spec = build_spec(request, rows)
     svg = vlc.vegalite_to_svg(spec)
@@ -227,7 +234,7 @@ def render_chart(request: ChartRequest, rows: list[ChartRow]) -> RenderedChart:
     return RenderedChart(spec=spec, png=png, svg=svg)
 
 
-def _native_element(request: ChartRequest, rows: list[ChartRow]) -> dict[str, Any]:
+def _native_element(request: ChartInput, rows: list[ChartRow]) -> dict[str, Any]:
     element: dict[str, Any] = {"type": NATIVE_TYPES[request.kind], "title": request.title}
     if request.kind in {"bar", "horizontal_bar"}:
         element["data"] = [{"x": row.x, "y": row.y} for row in rows]
@@ -244,7 +251,7 @@ def _native_element(request: ChartRequest, rows: list[ChartRow]) -> dict[str, An
         element["data"] = [{"title": label, "data": values} for label, values in stacks.items()]
     elif request.kind in {"pie", "donut"}:
         element["data"] = [{"legend": row.x, "value": row.y} for row in rows]
-    elif request.kind == "gauge":
+    elif request.kind == "gauge" and not isinstance(request, FileChartRequest):
         total = sum(row.y for row in rows)
         element.update(
             min=0, max=request.target, value=total, valueFormat="Fraction",
@@ -256,7 +263,9 @@ def _native_element(request: ChartRequest, rows: list[ChartRow]) -> dict[str, An
     return element
 
 
-def _drill_actions(request: ChartRequest, rows: list[ChartRow]) -> list[dict[str, Any]]:
+def _drill_actions(request: ChartInput, rows: list[ChartRow]) -> list[dict[str, Any]]:
+    if isinstance(request, FileChartRequest):
+        return []
     dimension = request.query.group_by
     next_dimension = {"region": "country", "category": "product"}.get(dimension)
     if next_dimension is None:
@@ -269,7 +278,7 @@ def _drill_actions(request: ChartRequest, rows: list[ChartRow]) -> list[dict[str
         payload["query"]["filters"][dimension] = [value]
         if payload["query"]["series"] == next_dimension:
             payload["query"]["series"] = None
-        drilled = ChartRequest.model_validate(payload)
+        drilled = type(request).model_validate(payload)
         actions.append({
             "type": "Action.Submit",
             "title": f"Explore {value}",
@@ -279,7 +288,7 @@ def _drill_actions(request: ChartRequest, rows: list[ChartRow]) -> list[dict[str
 
 
 def adaptive_card(
-    request: ChartRequest, rows: list[ChartRow], png_url: str
+    request: ChartInput, rows: list[ChartRow], png_url: str
 ) -> tuple[dict[str, Any], bool, str | None]:
     """Return a native card or explicit image fallback, with accessible data and drill actions.
 
@@ -288,13 +297,16 @@ def adaptive_card(
     """
     total = sum(row.y for row in rows)
     summary = (
+        f"Uploaded file. {request.query.aggregation.title()} of {request.query.metric}: "
+        f"{len(rows)} groups. Ask a follow-up to change columns or filters."
+    ) if isinstance(request, FileChartRequest) else (
         f"Synthetic sales. {request.query.metric.title()}: {total:,.2f} across {len(rows)} groups. "
         f"{request.query.start_month} to {request.query.end_month}."
     ) if rows else "No data matches the selected filters."
     image = {"type": "Image", "url": png_url, "altText": f"{request.title}. {summary}", "size": "Stretch"}
     reason = _static_reason(request, rows)
     supported = reason is None
-    element = _native_element(request, rows) if supported else image.copy()
+    element: dict[str, Any] = _native_element(request, rows) if supported else image.copy()
     if supported:
         element["fallback"] = image.copy()
     body: list[dict[str, Any]] = [
@@ -308,7 +320,13 @@ def adaptive_card(
         body.append({
             "type": "FactSet",
             "facts": [
-                {"title": f"{row.x} / {row.series}", "value": f"{row.y:,.2f} (units: {row.units:,.0f})"}
+                {
+                    "title": f"{row.x} / {row.series}",
+                    "value": (
+                        f"{row.y:,.2f}" if isinstance(request, FileChartRequest)
+                        else f"{row.y:,.2f} (units: {row.units:,.0f})"
+                    ),
+                }
                 for row in rows[:SAMPLE_TABLE_ROW_BUDGET]
             ],
         })

@@ -108,7 +108,7 @@ export function createChartView(bundle, { onDrill } = {}) {
     root.append(heading, summary, toolbar, canvas, status);
     const nextDimensions = { region: "country", country: "product", category: "product", channel: "region", month: "region" };
     let select;
-    if (onDrill && nextDimensions[bundle.request.query.group_by]) {
+    if (onDrill && bundle.request.source !== "file" && nextDimensions[bundle.request.query.group_by]) {
       const drillBar = element("div", "drill-bar");
       const label = element("label", "drill-label", `Explore ${nextDimensions[bundle.request.query.group_by]} within`);
       select = element("select", "select");
@@ -141,7 +141,9 @@ export function createChartView(bundle, { onDrill } = {}) {
       drillBar.append(label, drill);
       root.append(drillBar);
     }
-    root.append(element("p", "chart-footnote", "SYNTHETIC DATA · 2025   /   Same Vega-Lite specification as the hosted agent"));
+    root.append(element("p", "chart-footnote", bundle.request.source === "file"
+      ? "UPLOADED DATA / Same Vega-Lite specification as the hosted agent"
+      : "SYNTHETIC DATA · 2025   /   Same Vega-Lite specification as the hosted agent"));
     const compiled = compile(chartSpec(bundle)).spec;
     const runtime = parse(compiled, null, { ast: true });
     const loader = {

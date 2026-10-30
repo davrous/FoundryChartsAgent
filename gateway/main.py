@@ -17,7 +17,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from src.charts_agent.contracts import ChartRequest
+from src.charts_agent.contracts import ChartRequest, FileInput
 from gateway.auth import SecurityMiddleware
 from gateway.client import AgentClient, AgentError
 from gateway.config import Settings
@@ -39,6 +39,7 @@ class ChatBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: str = Field(min_length=1, max_length=8000)
     previous_response_id: str | None = Field(default=None, max_length=256)
+    file: FileInput | None = None
 
 
 class DrillBody(BaseModel):
@@ -46,14 +47,17 @@ class DrillBody(BaseModel):
     request: ChartRequest
 
 
-async def read_body(request: Request, model: type[BaseModel]) -> BaseModel:
+async def read_body[Body: BaseModel](request: Request, model: type[Body]) -> Body:
     body = bytearray()
     async for chunk in request.stream():
         body.extend(chunk)
-        if len(body) > MAX_BODY_BYTES:
+        if len(body) > (1_500_000 if model is ChatBody else MAX_BODY_BYTES):
             raise AgentError("Request body is too large.", 413)
     try:
-        return model.model_validate_json(body)
+        parsed = model.model_validate_json(body)
+        if len(body) > MAX_BODY_BYTES and (not isinstance(parsed, ChatBody) or parsed.file is None):
+            raise AgentError("Request body is too large.", 413)
+        return parsed
     except ValidationError as exc:
         # Do not echo input values: requests may inadvertently contain credentials.
         details = "; ".join(
@@ -156,7 +160,7 @@ def create_app(settings: Settings | None = None, agent_client: AgentClient | Non
 
     async def chat(request: Request):
         body = await read_body(request, ChatBody)
-        return JSONResponse(await client.chat(body.message, body.previous_response_id))
+        return JSONResponse(await client.chat(body.message, body.previous_response_id, body.file))
 
     async def drill(request: Request):
         body = await read_body(request, DrillBody)

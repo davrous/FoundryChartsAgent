@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from dataclasses import replace
+import base64
 import json
 import os
 from pathlib import Path
@@ -178,6 +179,56 @@ def test_oversized_drill_is_rejected_before_any_upstream_request(bundle):
         assert requests == []
 
 
+def test_web_file_forwarding_accepts_bounded_large_inline_uploads(bundle):
+    app, _, requests = mock_gateway(bundle)
+    data = b"K,V\n" + b"A,1\n" * 10_000
+    upload = {"filename": "metrics.csv", "file_data": "data:text/csv;base64," + base64.b64encode(data).decode()}
+    with TestClient(app, base_url="http://localhost:8190") as client:
+        response = client.post(
+            "/api/chat", json={"message": "Chart my file", "file": upload},
+            headers={"Origin": "http://localhost:8190"},
+        )
+    assert response.status_code == 200
+    forwarded = json.loads(requests[0].content)
+    assert forwarded["input"] == [{"role": "user", "content": [
+        {"type": "input_text", "text": "Chart my file"},
+        {"type": "input_file", **upload},
+    ]}]
+    assert forwarded["metadata"] == {"chart_output": "interactive"}
+    assert "authorization" not in requests[0].headers
+
+
+async def test_foundry_file_forwarding_retains_agent_reference(bundle):
+    from src.charts_agent.contracts import FileInput
+
+    settings = Settings(
+        dev_mode=True, mode="foundry",
+        project_endpoint="https://sample.services.ai.azure.com/api/projects/demo", agent_name="charts",
+    )
+    responses = SimpleNamespace(create=AsyncMock(return_value=SimpleNamespace(model_dump=lambda **_: response_for(bundle))))
+    agent = AgentClient(settings, responses=responses)
+    upload = FileInput(filename="data.csv", file_data="data:text/csv;base64,QSxCCjEsMg==")
+    await agent.chat("Use this file", file=upload)
+    forwarded = responses.create.call_args.kwargs
+    assert forwarded["input"][0]["content"][1] == {"type": "input_file", **upload.model_dump()}
+    assert forwarded["extra_body"]["agent"]["name"] == "charts"
+
+
+def test_web_file_validation_errors_are_actionable_and_not_hidden_by_502(bundle):
+    def rejected(request):
+        return httpx.Response(422, json={
+            "error_code": "file_input_invalid", "error": "Save the CSV as UTF-8 before uploading it.",
+        })
+
+    app, _, _ = mock_gateway(bundle, rejected)
+    with TestClient(app, base_url="http://localhost:8190") as client:
+        response = client.post(
+            "/api/chat", json={"message": "Chart"}, headers={"Origin": "http://localhost:8190"},
+        )
+    assert response.status_code == 422
+    assert "UTF-8" in response.json()["error"]
+
+
 def test_remote_errors_are_propagated_without_credentials(bundle):
     def unavailable(request):
         return httpx.Response(401, json={"error": "credential=do-not-expose"})
@@ -324,7 +375,7 @@ def test_built_mcp_html_has_no_external_assets_or_credentials():
     path = Settings().web_dist / "mcp-app.html"
     if not path.is_file():
         pytest.skip("Run npm --prefix web run build first")
-    html = path.read_text()
+    html = path.read_text(encoding="utf-8")
     assert '<script type="module"' in html
     assert '<script src=' not in html
     assert 'src="https://' not in html

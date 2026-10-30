@@ -1,4 +1,5 @@
 import { createChartView, element } from "./chart-view.js";
+import { encodeFile } from "./file-input.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -7,7 +8,7 @@ root.innerHTML = `
     <aside class="sidebar">
       <a class="brand" href="/" aria-label="Foundry Charts home"><span class="brand-mark">▥</span><span>Foundry<span class="brand-sub">CHARTS STUDIO</span></span></a>
       <div class="sidebar-section"><span class="eyebrow">WORKSPACE</span><div class="workspace-active">◈ &nbsp; Sales exploration <span class="count">01</span></div></div>
-      <div class="sidebar-section"><span class="eyebrow">YOUR DATA</span><p class="data-label">◉ &nbsp; Global sales · 2025</p><p class="muted">A fictional dataset. Real exploration.</p></div>
+      <div class="sidebar-section"><span class="eyebrow">YOUR DATA</span><p id="data-label" class="data-label">◉ &nbsp; Global sales · 2025</p><p id="data-description" class="muted">A fictional dataset. Real exploration.</p></div>
       <div class="sidebar-bottom"><span class="status-dot"></span><span id="connection-status">Checking gateway…</span><p>Powered by Microsoft Foundry</p></div>
     </aside>
     <main class="main">
@@ -20,7 +21,7 @@ root.innerHTML = `
         </div>
       </section>
       <section id="conversation" class="conversation" aria-label="Conversation" aria-live="polite"></section>
-      <div class="composer-wrap"><form id="chat-form" class="composer"><label class="sr-only" for="message">Ask about your sales data</label><textarea id="message" rows="1" maxlength="8000" placeholder="Ask about your sales data…" required></textarea><button id="send" type="submit" aria-label="Send message">↑</button></form><p class="composer-hint"><span>↵ Send &nbsp; · &nbsp; Shift + ↵ New line</span><span>Synthetic 2025 sales · AI can make mistakes</span></p></div>
+      <div class="composer-wrap"><div class="file-controls"><label class="button subtle" for="data-file">Attach CSV / Excel<input id="data-file" type="file" accept=".csv,.xlsx" class="sr-only"></label><span id="file-status" role="status">No file attached</span><button id="remove-file" class="button subtle" type="button" hidden>Remove file</button></div><form id="chat-form" class="composer"><label class="sr-only" for="message">Ask about your data</label><textarea id="message" rows="1" maxlength="8000" placeholder="Ask about your data or attach a CSV / Excel file…"></textarea><button id="send" type="submit" aria-label="Send message">↑</button></form><p class="composer-hint"><span>↵ Send &nbsp; · &nbsp; Shift + ↵ New line</span><span id="data-source">Synthetic 2025 sales · AI can make mistakes</span></p></div>
     </main>
   </div>`;
 
@@ -31,6 +32,12 @@ let previousResponseId;
 let sending = false;
 let generation = 0;
 const charts = [];
+const fileInput = root.querySelector("#data-file");
+const fileStatus = root.querySelector("#file-status");
+const removeFile = root.querySelector("#remove-file");
+let attachedFile;
+let fileGeneration = 0;
+let readingFile = false;
 
 async function post(path, body) {
   const response = await fetch(path, {
@@ -59,18 +66,20 @@ function message(role, text) {
 }
 
 async function sendMessage(text) {
-  if (sending || !text.trim()) return;
+  if (sending || readingFile || (!text.trim() && !attachedFile)) return;
+  if (!text.trim()) text = "Analyze the uploaded table and create a useful chart.";
   sending = true;
   submit.disabled = true;
   const current = generation;
   root.querySelector("#welcome").hidden = true;
-  message("user", text);
+  const file = attachedFile;
+  message("user", text + (file ? `\nAttached: ${file.filename}` : ""));
   input.value = "";
   const reply = message("assistant", "Looking into your data…");
   reply.block.classList.add("pending");
   reply.block.scrollIntoView({ block: "end", behavior: "smooth" });
   try {
-    const result = await post("/api/chat", { message: text, ...(previousResponseId ? { previous_response_id: previousResponseId } : {}) });
+    const result = await post("/api/chat", { message: text, ...(file ? { file } : {}), ...(previousResponseId ? { previous_response_id: previousResponseId } : {}) });
     if (generation !== current) return;
     previousResponseId = result.response_id;
     reply.content.textContent = result.text || (result.charts.length ? "Here’s your chart. Select a mark to explore further." : "No chart was returned.");
@@ -107,7 +116,7 @@ input.addEventListener("keydown", (event) => {
 root.querySelectorAll("[data-prompt]").forEach((button) => {
   button.addEventListener("click", () => void sendMessage(button.dataset.prompt));
 });
-root.querySelector("#clear-chat").addEventListener("click", () => {
+function clearConversation() {
   generation++;
   previousResponseId = undefined;
   charts.splice(0).forEach((chart) => chart.destroy());
@@ -116,6 +125,52 @@ root.querySelector("#clear-chat").addEventListener("click", () => {
   sending = false;
   submit.disabled = false;
   input.focus();
+}
+
+function clearFile() {
+  fileGeneration++;
+  attachedFile = undefined;
+  fileInput.value = "";
+  fileStatus.textContent = "No file attached";
+  fileStatus.classList.remove("error");
+  removeFile.hidden = true;
+  readingFile = false;
+  root.querySelector("#data-label").textContent = "◉ Global sales · 2025";
+  root.querySelector("#data-description").textContent = "A fictional dataset. Real exploration.";
+  root.querySelector("#data-source").textContent = "Synthetic 2025 sales · AI can make mistakes";
+}
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  clearFile();
+  clearConversation();
+  const current = ++fileGeneration;
+  readingFile = true;
+  fileStatus.textContent = "Reading file…";
+  void encodeFile(file).then((result) => {
+    if (current !== fileGeneration) return;
+    attachedFile = result;
+    fileStatus.textContent = `${result.filename} (sent with each follow-up)`;
+    removeFile.hidden = false;
+    root.querySelector("#data-label").textContent = `◉ ${result.filename}`;
+    root.querySelector("#data-description").textContent = "Your uploaded table.";
+    root.querySelector("#data-source").textContent = "Uploaded data · AI can make mistakes";
+  }).catch((error) => {
+    if (current !== fileGeneration) return;
+    fileStatus.textContent = error.message;
+    fileStatus.classList.add("error");
+  }).finally(() => {
+    if (current === fileGeneration) readingFile = false;
+  });
+});
+removeFile.addEventListener("click", () => {
+  clearFile();
+  clearConversation();
+});
+root.querySelector("#clear-chat").addEventListener("click", () => {
+  clearFile();
+  clearConversation();
 });
 fetch("/health").then((response) => {
   if (!response.ok) throw new Error("Health check failed");

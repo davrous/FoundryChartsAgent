@@ -16,6 +16,9 @@ export function filteredRows(rows, categories, series) {
 }
 
 export function drillRequest(bundle, category) {
+  if (bundle.request.source === "file") {
+    throw new Error("Use a follow-up question to explore uploaded columns.");
+  }
   const next = { region: "country", country: "product", category: "product", channel: "region", month: "region" };
   const query = bundle.request.query;
   const dimension = next[query.group_by];

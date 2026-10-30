@@ -5,7 +5,7 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
-from src.charts_agent.contracts import ChartBundle, ChartRequest
+from src.charts_agent.contracts import ChartBundle, ChartRequest, FileInput
 from gateway.config import Settings
 
 
@@ -16,6 +16,14 @@ class AgentError(Exception):
     def __init__(self, message: str, status_code: int = 502):
         super().__init__(message)
         self.status_code = status_code
+
+
+def file_error(payload: object) -> str | None:
+    if isinstance(payload, dict) and payload.get("error_code") == "file_input_invalid":
+        message = payload.get("error")
+        if isinstance(message, str) and len(message) <= 500:
+            return message
+    return None
 
 
 def parse_response(payload: dict[str, Any]) -> dict[str, Any]:
@@ -79,8 +87,10 @@ class AgentClient:
         if self._credential is not None:
             await self._credential.close()
 
-    async def chat(self, message: str, previous_response_id: str | None = None) -> dict:
-        return await self._send(message, {"chart_output": "interactive"}, previous_response_id)
+    async def chat(
+        self, message: str, previous_response_id: str | None = None, file: FileInput | None = None,
+    ) -> dict:
+        return await self._send(message, {"chart_output": "interactive"}, previous_response_id, file)
 
     async def drill(self, request: ChartRequest) -> dict:
         serialized = json.dumps(request.model_dump(mode="json"), separators=(",", ":"))
@@ -94,8 +104,17 @@ class AgentClient:
             raise AgentError("The hosted agent did not return exactly one requested chart.")
         return result["charts"][0]
 
-    async def _send(self, message: str, metadata: dict, previous_response_id: str | None = None) -> dict:
-        payload = {"input": message, "metadata": metadata, "stream": False}
+    async def _send(
+        self, message: str, metadata: dict, previous_response_id: str | None = None, file: FileInput | None = None,
+    ) -> dict:
+        payload: dict[str, Any] = {"input": message, "metadata": metadata, "stream": False}
+        if file is not None:
+            payload["input"] = [{
+                "role": "user", "content": [
+                    {"type": "input_text", "text": message},
+                    {"type": "input_file", **file.model_dump()},
+                ],
+            }]
         if previous_response_id:
             payload["previous_response_id"] = previous_response_id
         if self.settings.mode == "local":
@@ -105,11 +124,18 @@ class AgentClient:
                 response = await self.http.post(
                     self.settings.local_agent_url.rstrip("/") + "/responses", json=payload
                 )
+                if response.status_code == 422 and "application/json" in response.headers.get("content-type", ""):
+                    try:
+                        reason = file_error(response.json())
+                    except ValueError as exc:
+                        raise AgentError("The hosted agent returned an invalid validation response.") from exc
+                    if reason is not None:
+                        raise AgentError(reason, 422)
                 response.raise_for_status()
             except httpx.TimeoutException as exc:
                 raise AgentError("The hosted agent timed out. Please retry.", 504) from exc
             except httpx.HTTPStatusError as exc:
-                status = 429 if exc.response.status_code == 429 else 502
+                status = exc.response.status_code if exc.response.status_code in {413, 422, 429} else 502
                 raise AgentError(f"The hosted agent returned HTTP {exc.response.status_code}.", status) from exc
             except httpx.RequestError as exc:
                 raise AgentError("The hosted agent is unavailable.", 502) from exc
@@ -128,9 +154,12 @@ class AgentClient:
         except APITimeoutError as exc:
             raise AgentError("The hosted agent timed out. Please retry.", 504) from exc
         except APIStatusError as exc:
+            reason = file_error(exc.body) if exc.status_code == 422 else None
+            if reason is not None:
+                raise AgentError(reason, 422) from exc
             raise AgentError(
                 f"The hosted agent returned HTTP {exc.status_code}.",
-                429 if exc.status_code == 429 else 502,
+                exc.status_code if exc.status_code in {413, 422, 429} else 502,
             ) from exc
         except APIConnectionError as exc:
             raise AgentError("The hosted agent is unavailable.") from exc

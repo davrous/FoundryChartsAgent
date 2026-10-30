@@ -1,4 +1,5 @@
 import asyncio
+import base64
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -541,3 +542,62 @@ async def test_active_work_capacity_rejects_without_starting_another_model_run()
 def test_invalid_timing_configuration_is_rejected(options):
     with pytest.raises(ValueError):
         ActivityOptions(**options)
+
+
+async def test_activity_upload_followups_clear_and_sender_isolation():
+    seen = []
+
+    async def run(messages):
+        caller = CALLER.get()
+        seen.append((caller.table.filename if caller.table else None, [message.text for message in messages]))
+        return SimpleNamespace(text="Uploaded analysis" if caller.table else "Synthetic analysis")
+
+    storage = MemoryStorage()
+    turns = runner(run)
+    data = base64.b64encode(b"Team,Value\nA,10\nB,20\n").decode()
+    try:
+        context, state, sent, *_ = await turn(text="", storage=storage)
+        context.activity.attachments = [
+            Attachment(name="private.csv", content_type="text/csv", content_url=f"data:text/csv;base64,{data}"),
+        ]
+        await turns.handle(context, state)
+        await drain(turns)
+        assert seen[0][0] == "private.csv"
+        assert "Use get_file_schema" in seen[0][1][-1]
+        assert sent[-1].text == "Uploaded analysis"
+        assert not state.conversation.get_value("chart_history")
+        follow = await turn(text="Show a line chart", storage=storage)
+        await turns.handle(follow[0], follow[1])
+        await drain(turns)
+        assert seen[-1][0] == "private.csv"
+        other = await turn(text="Other user", storage=storage)
+        other[0].activity.from_property.id = "another-user"
+        await turns.handle(other[0], other[1])
+        await drain(turns)
+        assert seen[-1] == (None, ["Other user"])
+        clear = await turn(text="/clear", storage=storage)
+        await turns.handle(clear[0], clear[1])
+        after = await turn(text="No file now", storage=storage)
+        await turns.handle(after[0], after[1])
+        await drain(turns)
+        assert seen[-1] == (None, ["No file now"])
+    finally:
+        await turns.close()
+
+
+async def test_bad_activity_file_is_actionable_without_a_model_call():
+    async def run(messages):
+        pytest.fail("A bad file must not invoke the model")
+
+    turns = runner(run)
+    try:
+        context, state, sent, *_ = await turn(text="")
+        context.activity.attachments = [
+            Attachment(name="legacy.xls", content_type="application/octet-stream", content_url="https://invalid.test"),
+        ]
+        await turns.handle(context, state)
+        await drain(turns)
+        assert ".csv or .xlsx" in sent[-1].text
+        assert not turns.agent.run.await_count
+    finally:
+        await turns.close()

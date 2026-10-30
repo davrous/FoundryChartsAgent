@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -183,3 +184,60 @@ async def test_framework_tool_revalidates_nested_model(host):
     finally:
         CALLER.reset(token)
         await service.close()
+
+
+async def test_reasoning_summary_requested_from_model(host, monkeypatch):
+    from agent import create_agent
+    from agent_framework.foundry import FoundryChatClient
+    from artifact_storage import ArtifactStore
+    from azure.ai.projects.aio import AIProjectClient
+    from chart_service import ChartService
+    from openai import AsyncOpenAI
+
+    requests = []
+
+    def respond(request):
+        assert request.url.path == "/v1/responses"
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json={
+            "id": "resp-reasoning", "object": "response", "created_at": 0,
+            "model": "test", "status": "completed", "error": None,
+            "parallel_tool_calls": False, "tool_choice": "auto", "tools": [],
+            "output": [
+                {"id": "rs-test", "type": "reasoning", "encrypted_content": "opaque-test",
+                 "summary": [{"type": "summary_text", "text": "I compared the requested groups."}]},
+                {"id": "msg-test", "type": "message", "role": "assistant", "status": "completed",
+                 "content": [{"type": "output_text", "text": "I can compare groups.", "annotations": []}]},
+            ],
+            "usage": {
+                "input_tokens": 10, "output_tokens": 10, "total_tokens": 20,
+                "input_tokens_details": {"cached_tokens": 0},
+                "output_tokens_details": {"reasoning_tokens": 3},
+            },
+        })
+
+    async with AsyncOpenAI(
+        api_key="test-key", base_url="https://model.invalid/v1",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(respond)),
+    ) as model_client:
+        project = Mock(spec=AIProjectClient)
+        project.get_openai_client.return_value = model_client
+        monkeypatch.setattr(
+            "agent.FoundryChatClient", lambda **kwargs: FoundryChatClient(project_client=project, **kwargs),
+        )
+        service = ChartService(ArtifactStore())
+        try:
+            agent = create_agent(service, "https://example.services.ai.azure.com/api/projects/test", "test")
+            response = await agent.run("Describe which groups you would compare.")
+        finally:
+            await service.close()
+
+    assert len(requests) == 1
+    assert requests[0]["reasoning"] == {"summary": "auto"}
+    assert requests[0]["store"] is False
+    assert requests[0]["parallel_tool_calls"] is False
+    assert "reasoning.encrypted_content" in requests[0]["include"]
+    assert any(
+        content.type == "text_reasoning" and content.text == "I compared the requested groups."
+        for message in response.messages for content in message.contents
+    )

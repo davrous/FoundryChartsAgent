@@ -13,7 +13,8 @@ integration. **Click the thumbnail below to watch on YouTube.**
 
 [![Watch Foundry + M365: Beyond Static Charts on YouTube](https://img.youtube.com/vi/i0YYFLNNSTM/hqdefault.jpg)](https://youtu.be/i0YYFLNNSTM)
 
-The sample queries a fictional sales database through a mock HTTP API. Users
+The sample queries a fictional sales database through a mock HTTP API, or
+analyzes an explicitly attached CSV/Excel table. Users
 can ask for an overview, compare metrics, and drill from regions into countries
 or from categories into products. A shared chart result becomes a static image,
 a native Adaptive Card, or an interactive SVG widget depending on the caller.
@@ -46,7 +47,8 @@ compatible host.
 
 ## Experiences
 
-All examples use **synthetic 2025 sales data**. Screenshots show the running
+The original examples use **synthetic 2025 sales data**. File uploads can contain
+other tabular data and are not automatically labeled synthetic. Screenshots show the running
 sample in the identified client; they do not require access to the original
 deployment.
 
@@ -123,6 +125,113 @@ connects tool results and subsequent drill-down calls to that resource.
 *Shown in Claude Desktop. Host chrome, permissions, and widget availability
 depend on the MCP client. See the [Copilot integration](#copilot-integration)
 section for the Microsoft 365 deployment path.*
+
+### Analyze a CSV or Excel file
+
+Start with [the sample CSV](samples/synthetic-sales-2026.csv): 36 fictional
+monthly records for 2026 with `month`, `region`, `revenue`, `cost`, `profit`, and `orders`.
+This is a separate, smaller dataset than the built-in sales database.
+
+1. In the **custom web chat**, select **Attach CSV / Excel** and choose the
+   sample file. Ask:
+   > Analyze this synthetic sales file. Show total revenue by region as a bar
+   > chart and identify the highest and lowest regions.
+2. Follow up:
+   > Compare monthly revenue by region as a line chart.
+3. Then:
+   > Focus on Europe. Chart revenue by month and identify its lowest month.
+
+Expected results: Americas **1,816,000**, Europe **1,535,000**, Asia Pacific
+**1,425,000**, total **4,776,000**. Europe's lowest month is August
+(**90,000**, versus **130,000** in July). The file does not establish a cause
+for that dip. Profit is an explicit column, not a model-calculated estimate.
+
+The web client keeps the selected file in browser memory and sends it with
+each follow-up. Choosing another file, **Remove file**, or **New conversation**
+starts a fresh conversation. The gateway forwards a standard Responses
+`input_file`; it does not parse or analyze the spreadsheet.
+
+**Responses API:** clients must send a user message with `input_text` and one
+`input_file` containing `filename` and a base64 data URI in `file_data`.
+For example, construct the input locally:
+
+```python
+import base64
+from pathlib import Path
+
+path = Path("samples/synthetic-sales-2026.csv")
+payload = {
+    "input": [{
+        "role": "user",
+        "content": [
+            {"type": "input_text", "text": "Chart revenue by region from this file."},
+            {
+                "type": "input_file",
+                "filename": path.name,
+                "file_data": "data:text/csv;base64," + base64.b64encode(path.read_bytes()).decode(),
+            },
+        ],
+    }],
+    "stream": False,
+}
+```
+
+Send this to the local `/responses` endpoint or the deployed Responses API;
+sending invokes the configured model. Reattach the file on every Responses
+request, even with `previous_response_id`. Hosted `file_id` references and
+arbitrary session filesystem paths are **not supported**; a Foundry UI picker
+that sends only `file_id` needs a compatible client rather than an invented
+filesystem mapping. Both streaming and non-streaming output use the existing
+static/interactive presentation contract.
+
+**Activity / Teams / Copilot:** attach a file where the host supports it.
+The adapter understands Teams `application/vnd.microsoft.teams.file.download.info`
+(`content.downloadUrl`), ordinary attachment `contentUrl`, and inline data URIs.
+It retains one parsed table per sender and conversation in bounded in-process
+memory for follow-ups. A new valid upload replaces the table; `/clear` removes
+it. File-derived history is not copied into shared conversation storage.
+Restarts/eviction require reattachment. Host-side upload and inline card
+rendering still require actual tenant acceptance tests.
+
+Teams' direct file APIs work in **personal chats**, not channels/group chats.
+`supportsFiles: true` does not grant Graph access or guarantee standalone
+Microsoft 365 Copilot attachment delivery. Only direct HTTPS download links on
+SharePoint, OneDrive, and Azure Blob domains are fetched; redirects and
+authenticated Graph/document references fail explicitly. No new Graph
+permissions or delegated OAuth flow are added. See
+[Teams file handling](https://learn.microsoft.com/microsoftteams/platform/bots/how-to/bots-filesv4).
+Use the web uploader if your host cannot supply a supported download link.
+
+**Supported data and limits**
+
+- Generic, unique, case-sensitive headers: use the names returned by
+  `get_file_schema`. No sales-specific column names or implicit 2025 date
+  filter are required.
+- UTF-8 CSV (optional BOM; comma, semicolon, or tab separators) and `.xlsx`
+  (first worksheet only). Use decimal-point numbers without currency symbols
+  or thousands separators. ISO `YYYY-MM` labels sort chronologically.
+- At most **1,000,000 bytes**, **2,000 data rows** (including blank rows),
+  **30 columns**, **20,000 cells**, and **256 characters per cell**.
+  Headers are at most 64 characters. Excel expanded ZIP data is capped at
+  10 MB; encrypted workbooks, formulas, error cells, macros and legacy `.xls`
+  are rejected. Formula-looking CSV cells remain plain text, never code.
+- Tools perform deterministic `sum`, `mean`, `min`, `max`, or `count`
+  aggregation, exact-value filters, optional series, and highest/lowest-group
+  analysis. `count` counts non-empty metric cells. Missing metric or grouping
+  values are omitted with explicit counts. Results never silently truncate
+  above the 256-group chart limit.
+- File charts support bar, horizontal/grouped/stacked bar, line, area, pie,
+  donut, and heatmap. No file scatter/gauge or invented derived columns.
+  File line charts use PNG fallback in Activity to preserve arbitrary category
+  labels. File charts do not get sales-specific drill buttons; use follow-up
+  questions and the web renderer's existing local filters instead.
+
+Raw uploads are not written to the agent filesystem or sent wholesale to the
+model. Schema samples, selected aggregates, summaries, and derived charts can
+contain sensitive data. They follow the model/telemetry and chart artifact
+storage policies; generated PNG/SVG files have the existing retention/SAS
+behavior. Do not treat this sample as durable storage, a governance solution,
+or authorization to upload confidential business data.
 
 ## Architecture
 
@@ -446,6 +555,7 @@ your target tenant; installing the Activity app does not install this widget.
 | [contracts.py](src/charts_agent/contracts.py) | Validated query/chart requests, rows and the shared `ChartBundle`. |
 | [mock_data.py](src/charts_agent/mock_data.py) | Seeded sales database and mock HTTP schema/query API. |
 | [chart_service.py](src/charts_agent/chart_service.py) | Data access, rendering and artifact pipeline. |
+| [tabular.py](src/charts_agent/tabular.py), [file_inputs.py](src/charts_agent/file_inputs.py) | Bounded CSV/XLSX parsing, deterministic aggregation, and Responses/Activity attachment adapters. |
 | [rendering.py](src/charts_agent/rendering.py) | Vega-Lite specifications, PNG/SVG rendering, Adaptive Card mapping and fallbacks. |
 | [artifact_storage.py](src/charts_agent/artifact_storage.py) | Local files or private Blob artifacts with signed URLs. |
 | [main.py](src/charts_agent/main.py), [activity_bridge.py](src/charts_agent/activity_bridge.py), [activity_delivery.py](src/charts_agent/activity_delivery.py) | Hosting, Activity conversation state, progress and final delivery. |
@@ -499,6 +609,19 @@ web/MCP view without duplicating its data-retrieval logic.
 
 Caller metadata chooses **presentation, not permissions**. Never use an
 output-format flag as an authorization decision.
+
+### Model reasoning summaries
+
+Model calls request `reasoning.summary: auto` without overriding reasoning
+effort. When the model supplies a summary, the Responses adapter preserves it
+as a separate reasoning item, including streaming summary events; it is not
+mixed into the chart's analysis or final answer. Summary availability and
+length depend on the configured model and request.
+
+The custom web/MCP client and Activity/Teams replies currently show the final
+answer and charts, not reasoning summaries. Their progress messages describe
+application stages, not model reasoning. Structured chart drill-downs that
+bypass the model do not produce a reasoning summary.
 
 ### Why Vega-Lite?
 
