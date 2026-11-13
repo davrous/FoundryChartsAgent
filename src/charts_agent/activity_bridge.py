@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import math
 import os
@@ -17,7 +18,7 @@ from pydantic import ValidationError
 from activity_delivery import ActivityDelivery
 from agent import CALLER, Caller
 from contracts import ChartRequest
-from file_inputs import FILE_NOTICE, activity_file
+from file_inputs import FILE_NOTICE, activity_file, describe_activity
 from progress import PROGRESS
 from tabular import FileInputError, Table
 
@@ -163,6 +164,10 @@ class ActivityTurns:
                     if generation != slot.generation:
                         await delivery.finish("This request was cancelled by /clear.", [])
                         return
+                    logger.info(
+                        "Activity message shape: %s",
+                        json.dumps(describe_activity(context.activity), separators=(",", ":"), default=str),
+                    )
                     if context.activity.attachments:
                         table = await activity_file(context.activity.attachments)
                         if table is not None:
@@ -198,7 +203,7 @@ class ActivityTurns:
                     # Detached work finishes after AgentApplication's automatic state save.
                     await state.save(context, force=True)
         except FileInputError as error:
-            logger.warning("Activity file input rejected")
+            logger.warning("Activity file input rejected: %s", error)
             if not delivery.finished:
                 await delivery.finish(str(error), [])
         except TimeoutError:

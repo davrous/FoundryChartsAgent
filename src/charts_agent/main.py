@@ -20,9 +20,28 @@ from agent import CALLER, Caller, create_agent  # noqa: E402
 from artifact_storage import ArtifactStore  # noqa: E402
 from chart_service import ChartService  # noqa: E402
 from contracts import ChartRequest  # noqa: E402
-from file_inputs import responses_file  # noqa: E402
+from file_inputs import describe_payload, responses_file  # noqa: E402
 from tabular import FileInputError, MAX_FILE_BODY_BYTES  # noqa: E402
 from progress import progress_delay_seconds  # noqa: E402
+
+INPUT_LOG = logging.getLogger("charts_agent.input")
+SAFE_HEADERS = {b"content-type", b"user-agent", b"x-request-id", b"x-ms-client-request-id"}
+
+
+def log_request_shape(scope: Scope, body: bytearray, payload: object) -> None:
+    if os.getenv("CHARTS_LOG_REQUEST_SHAPE", "true").lower() == "false":
+        return
+    headers = scope.get("headers", [])
+    INPUT_LOG.info("Responses request shape: %s", json.dumps({
+        "path": scope.get("path"),
+        "bytes": len(body),
+        "header_names": sorted({key.decode("latin-1").lower() for key, _ in headers}),
+        "headers": {
+            key.decode("latin-1").lower(): value.decode("latin-1")[:200]
+            for key, value in headers if key.lower() in SAFE_HEADERS
+        },
+        **describe_payload(payload),
+    }, separators=(",", ":")))
 
 
 class CallerMiddleware:
@@ -46,6 +65,7 @@ class CallerMiddleware:
                 break
         try:
             payload = json.loads(body)
+            log_request_shape(scope, body, payload)
             if not isinstance(payload, dict):
                 raise ValueError("Request must be a JSON object")
             metadata = payload.get("metadata") or {}
@@ -65,6 +85,10 @@ class CallerMiddleware:
             if table is not None and request is not None:
                 raise FileInputError("File uploads cannot be combined with a mock-database drill-down request.")
             caller = Caller(output=mode, request=request, table=table)
+            INPUT_LOG.info(
+                "Responses file input: %s",
+                f"{table.filename} ({len(table.rows)} rows)" if table is not None else "none",
+            )
             if table is not None:
                 body = bytearray(json.dumps(payload).encode("utf-8"))
                 scope = {**scope, "headers": [
@@ -72,7 +96,7 @@ class CallerMiddleware:
                 ]}
         except (ValueError, TypeError, ValidationError) as error:
             message = str(error) if isinstance(error, FileInputError) else "Invalid Responses metadata or file input."
-            logging.getLogger(__name__).warning("Rejected Responses input (%s)", type(error).__name__)
+            INPUT_LOG.warning("Rejected Responses input (%s): %s", type(error).__name__, message)
             code = "file_input_invalid" if isinstance(error, FileInputError) else "invalid_request"
             await JSONResponse({"error": message, "error_code": code}, 422)(scope, receive, send)
             return

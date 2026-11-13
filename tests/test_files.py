@@ -232,6 +232,69 @@ async def test_downloads_are_bounded_anonymous_and_do_not_follow_redirects():
             assert "sig=private" not in str(error.value)
 
 
+async def test_teams_file_with_html_copy_of_message_is_accepted_and_logged_safely():
+    from microsoft_agents.activity import Attachment
+
+    from file_inputs import activity_file, describe_attachments
+
+    url = "https://contoso-my.sharepoint.com/personal/u/_layouts/15/download.aspx?UniqueId=1&tempauth=SECRET"
+    attachments = [
+        Attachment(
+            content_type="application/vnd.microsoft.teams.file.download.info", name="sales.csv",
+            content_url="https://contoso-my.sharepoint.com/personal/u/Documents/sales.csv",
+            content={"downloadUrl": url, "uniqueId": "1", "fileType": "csv"},
+        ),
+        Attachment(content_type="text/html", content="<p>Chart this file</p>"),
+    ]
+    real_client = httpx.AsyncClient
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url))
+        return httpx.Response(200, content=CSV)
+
+    with patch("file_inputs.httpx.AsyncClient", side_effect=lambda **kw: real_client(
+        transport=httpx.MockTransport(handler), **kw,
+    )):
+        table = await activity_file(attachments)
+    assert table.filename == "sales.csv" and seen == [url]
+    shapes = describe_attachments(attachments)
+    assert [shape["file"] for shape in shapes] == [True, False]
+    assert shapes[0]["download_url"] == {"url": "https://contoso-my.sharepoint.com", "path_suffix": ".aspx"}
+    assert "SECRET" not in json.dumps(shapes) and "Chart this file" not in json.dumps(shapes)
+    assert await activity_file([attachments[1]]) is None
+    with pytest.raises(FileInputError, match="exactly one"):
+        await activity_file([attachments[0], attachments[0], attachments[1]])
+
+
+def test_activity_shape_describes_html_and_channel_data_without_values():
+    from microsoft_agents.activity import Activity, Attachment
+
+    from file_inputs import describe_activity
+
+    html = (
+        '<p>Secret prose <attachment id="abc-123"></attachment>'
+        '<a href="https://contoso-my.sharepoint.com/personal/u/sales.csv?tempauth=TOKEN">sales.csv</a></p>'
+    )
+    activity = Activity(
+        type="message", text="Secret prose", text_format="plain",
+        attachments=[Attachment(content_type="text/html", content=html)],
+        channel_data={"tenant": {"id": "tenant-secret"}, "fileUrl": "https://x.sharepoint.com/f.csv?sig=SIG"},
+        entities=[{"type": "clientInfo", "locale": "en-US"}],
+    )
+    shape = describe_activity(activity)
+    html_shape = shape["attachments"][0]["html"]
+    assert html_shape["tags"] == {"a": 1, "attachment": 1, "p": 1}
+    assert html_shape["attributes"] == ["href", "id"]
+    assert html_shape["links"] == [{"url": "https://contoso-my.sharepoint.com", "path_suffix": ".csv"}]
+    assert shape["channel_data"]["tenant"] == {"id": "str"}
+    assert shape["channel_data"]["fileUrl"] == {"url": "https://x.sharepoint.com", "path_suffix": ".csv"}
+    assert shape["entities"] == [{"type": "str", "locale": "str"}]
+    dumped = json.dumps(shape)
+    for secret in ("Secret", "TOKEN", "SIG", "tenant-secret", "abc-123", "en-US"):
+        assert secret not in dumped
+
+
 async def test_responses_file_parts_are_replaced_before_the_sdk_or_model_sees_them():
     body = payload()
     table = await responses_file(body)
@@ -302,6 +365,35 @@ async def test_bad_ingress_uses_safe_actionable_errors():
         assert response.status_code == 422
         assert "unique" in response.json()["error"]
         assert "private-cell" not in response.text
+
+
+async def test_ingress_logs_request_shape_without_content_or_credentials(caplog):
+    body = payload()
+    body["input"][0]["content"].append({
+        "type": "input_file", "filename": "teams.csv",
+        "file_url": "https://contoso.sharepoint.com/personal/u/data.csv?sig=SECRET-SIG",
+    })
+    body["input"].insert(0, {"type": "item_reference", "id": "msg_1"})
+    body["metadata"] = {"teams_hint": "https://smba.trafficmanager.net/teams/v3?token=SECRET-TOKEN"}
+    app = CallerMiddleware(inspect_caller)
+    caplog.set_level("INFO", logger="charts_agent.input")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        await client.post("/responses", json=body, headers={"Authorization": "Bearer SECRET-BEARER"})
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    shape = json.loads(logged.split("Responses request shape: ", 1)[1].split("\n", 1)[0])
+    assert "authorization" in shape["header_names"] and "authorization" not in shape["headers"]
+    assert shape["paths"]["input[].id"] == "str"
+    parts = {part["type"]: part for part in shape["content_parts"] if part["type"] != "input_file"}
+    assert parts["input_text"]["chars"] == len("Chart sales by department")
+    files = [part for part in shape["content_parts"] if part["type"] == "input_file"]
+    assert files[0]["file_data"]["data_uri"] == "text/csv"
+    assert files[1]["file_url"] == {"url": "https://contoso.sharepoint.com", "path_suffix": ".csv"}
+    assert {"path": "metadata.teams_hint", "url": "https://smba.trafficmanager.net", "path_suffix": ""} in (
+        shape["url_like_values"]
+    )
+    assert "Rejected Responses input (FileInputError)" in logged
+    for secret in ("SECRET", "Chart sales", base64.b64encode(CSV).decode()[:20], "Design"):
+        assert secret not in logged
 
 
 async def test_file_tools_and_real_shared_rendering(monkeypatch, tmp_path):

@@ -49,6 +49,8 @@ services:
         protocols:
             - protocol: responses
               version: 2.0.0
+            - protocol: activity
+              version: 2.0.0
     ai-project:
         host: azure.ai.project
         deployments: []
