@@ -22,6 +22,7 @@ from chart_service import ChartService  # noqa: E402
 from contracts import ChartRequest  # noqa: E402
 from file_inputs import responses_file  # noqa: E402
 from tabular import FileInputError, MAX_FILE_BODY_BYTES  # noqa: E402
+from progress import progress_delay_seconds  # noqa: E402
 
 
 class CallerMiddleware:
@@ -92,6 +93,7 @@ class CallerMiddleware:
 
 
 def create_app():
+    progress_delay_seconds()
     artifacts = ArtifactStore()
     service = ChartService(artifacts)
     agent = create_agent(service, os.environ["FOUNDRY_PROJECT_ENDPOINT"], os.environ["AZURE_AI_MODEL_DEPLOYMENT_NAME"])

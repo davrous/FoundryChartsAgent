@@ -2,8 +2,8 @@
 
 `azd deploy` already did the Azure side for you:
 
-- Azure Bot: `charts-agent23601` (Microsoft Teams channel enabled)
-- Bot ID (msaAppId): `06220016-75ed-4384-86fc-e2fcfc113b38`
+- Azure Bot: `charts-agent67160` (Microsoft Teams channel enabled)
+- Bot ID (msaAppId): `4f198b0b-0d4d-4e30-8d54-0ed11f6cdd9c`
 - Teams app package: `appPackage.zip` (generated next to this guide, ready to sideload)
 
 One step remains: sideload the package to try your agent. Pick ONE of the two ways

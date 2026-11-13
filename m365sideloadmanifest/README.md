@@ -64,8 +64,9 @@ even though this builder and its tests run successfully in the service environme
 
 Upload **`build/foundry-charts.zip`**, not a ZIP of this entire folder. Its root
 must contain only the manifest and the two referenced PNGs, with no enclosing
-directory, SVG sources, README or macOS metadata. Increment the manifest's app
-version when distributing an update; preserve the app/bot IDs.
+directory, SVG sources, README or macOS metadata. Increment the manifest's app version when distributing an update. Preserve the
+Teams app ID, and preserve the bot ID unless the Foundry agent was deleted and
+recreated with a new Bot Service registration.
 
 Validate against the exact schema and check the PNG dimensions, color-icon
 opacity/safe area and white-only outline pixels after regenerating artwork.
@@ -79,7 +80,14 @@ The supplied privacy and terms URLs both point to the publisher's homepage;
 use real policy pages before a store submission. Do not invent identity or
 policy URLs to make a validator appear successful.
 
-## Retest Copilot chart images with version 1.0.5
+## Retest Copilot chart images with version 1.0.7
+
+Version **1.0.7** keeps the existing Teams app ID and artwork while targeting
+the current `charts-agent67160` Bot Service registration with bot ID
+`4f198b0b-0d4d-4e30-8d54-0ed11f6cdd9c`. Its live `msaAppId` and Activity
+endpoint were verified against `charts-agent` in `proj-dav` (North Central US).
+The same bot ID is used in `bots`, `webApplicationInfo` and
+`copilotAgents.customEngineAgents`.
 
 The [manifest](manifest.json) allows both observed image hosts in `validDomains`:
 
@@ -125,8 +133,8 @@ Use the following steps to reproduce the check for your deployment:
 1. Regenerate the package using the commands above, then upload
    [build/foundry-charts.zip](build/foundry-charts.zip) through the same custom
    app upload flow used for the existing agent. Update the existing app when
-   offered; its app/bot IDs are unchanged.
-2. Confirm the installed package is **1.0.5**, then refresh/reopen Copilot.
+   offered; its Teams app ID is unchanged.
+2. Confirm the installed package is **1.0.7**, then refresh/reopen Copilot.
    A local manifest edit does not update an already installed package.
 3. Start a new agent conversation and ask:
    **"Show a heatmap of 2025 revenue by month and region."**

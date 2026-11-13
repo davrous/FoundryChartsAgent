@@ -319,10 +319,10 @@ async def test_real_chart_service_reports_stages_and_keeps_non_activity_calls_qu
         chart = await service.create(ChartRequest())
         assert chart.rows and chart.images["png"] and chart.adaptive_card
         assert [c.args[0] for c in progress.await_args_list] == [
-            "Reading the available sample sales dimensions and filters...",
-            "Querying the sample sales data...",
-            "Rendering your chart...",
-            "Saving the chart images and preparing the Adaptive Card...",
+            "Calling get_data_schema: reading the available sample sales dimensions and filters...",
+            "Calling create_chart: querying the sample sales data...",
+            "Calling create_chart: rendering your chart...",
+            "Calling create_chart: saving the chart images and preparing the Adaptive Card...",
         ]
     finally:
         PROGRESS.reset(token)

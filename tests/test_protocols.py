@@ -3,7 +3,8 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
@@ -63,8 +64,12 @@ def host(monkeypatch, tmp_path):
     monkeypatch.setenv("OTEL_SDK_DISABLED", "true")
     from chart_service import ChartService
     from main import create_app
+    from progress import report_progress
 
     async def create(self, request):
+        await report_progress("Calling create_chart: querying the sample sales data...")
+        await report_progress("Calling create_chart: rendering your chart...")
+        await report_progress("Calling create_chart: saving the chart images and preparing the Adaptive Card...")
         return bundle(request)
 
     monkeypatch.setattr(ChartService, "create", create)
@@ -89,6 +94,20 @@ def output_text(payload):
         for content in item.get("content", [])
         if content.get("type") == "output_text"
     )
+
+
+def test_chart_output_appends_grounded_analysis_after_artifacts():
+    from agent import chart_text
+
+    text = chart_text(
+        [bundle(ChartRequest(title="Regional trend"))],
+        "static",
+        "### What stands out\n\n- Europe leads the synthetic data.\n\n"
+        "**Decision prompt:** Drill into Europe by country.",
+    )
+    assert text.index("![Chart]") < text.index("### What stands out")
+    assert "Europe leads the synthetic data." in text
+    assert "Drill into Europe by country." in text
 
 
 def test_default_responses_static_image(host):
@@ -117,8 +136,19 @@ def test_responses_stream_contains_completed_chart(host):
         response = client.post("/responses", json=request_body(stream=True))
     assert response.status_code == 200
     assert "response.completed" in response.text
+    assert "response.output_text.delta" in response.text
+    assert "Calling create_chart:" not in response.text
     assert "https://example.invalid/test.png" in response.text
     assert "response.failed" not in response.text
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    completed = next(event["response"] for event in events if event["type"] == "response.completed")
+    final_text = output_text(completed)
+    assert "Calling create_chart:" not in final_text
+    assert "![Chart](https://example.invalid/test.png)" in final_text
 
 
 @pytest.mark.parametrize("metadata", [
@@ -241,3 +271,69 @@ async def test_reasoning_summary_requested_from_model(host, monkeypatch):
         content.type == "text_reasoning" and content.text == "I compared the requested groups."
         for message in response.messages for content in message.contents
     )
+
+
+async def test_progress_delay_applies_only_when_streaming_reporter_is_active(monkeypatch):
+    from progress import PROGRESS, report_progress
+
+    monkeypatch.setenv("TOOL_PROGRESS_DELAY_SECONDS", "2")
+    reporter = AsyncMock()
+    token = PROGRESS.set(reporter)
+    try:
+        with patch("progress.asyncio.sleep", new=AsyncMock()) as sleep:
+            await report_progress("Calling create_chart: querying...")
+        reporter.assert_awaited_once_with("Calling create_chart: querying...")
+        sleep.assert_awaited_once_with(2.0)
+    finally:
+        PROGRESS.reset(token)
+
+    with patch("progress.asyncio.sleep", new=AsyncMock()) as sleep:
+        await report_progress("No streaming reporter")
+    sleep.assert_not_awaited()
+
+
+@pytest.mark.parametrize("value", ["invalid", "-1", "11", "nan", "inf"])
+def test_progress_delay_rejects_invalid_values(monkeypatch, value):
+    from progress import progress_delay_seconds
+
+    monkeypatch.setenv("TOOL_PROGRESS_DELAY_SECONDS", value)
+    with pytest.raises(ValueError, match="between 0 and 10"):
+        progress_delay_seconds()
+
+
+async def test_stream_creates_and_consumes_upstream_in_producer_context(monkeypatch):
+    from agent_framework import AgentResponse, AgentResponseUpdate, Content, ResponseStream
+    from agent import ChartOutputMiddleware
+    from progress import report_progress
+
+    monkeypatch.setenv("TOOL_PROGRESS_DELAY_SECONDS", "0")
+
+    async def upstream():
+        yield AgentResponseUpdate(contents=[
+            Content.from_function_call(call_id="call-1", name="create_chart", arguments={}),
+        ])
+        await report_progress("Calling create_chart: querying...")
+        yield AgentResponseUpdate(contents=[
+            Content.from_function_result(call_id="call-1", result="done"),
+        ])
+        yield AgentResponseUpdate(contents=[
+            Content.from_text("### What stands out\n\n- Europe leads the synthetic data."),
+        ])
+
+    context = SimpleNamespace(stream=True, result=None)
+    called = False
+
+    async def call_next():
+        nonlocal called
+        called = True
+        context.result = ResponseStream(upstream(), finalizer=AgentResponse.from_updates)
+
+    middleware = ChartOutputMiddleware(AsyncMock())
+    await middleware.process(context, call_next)
+    assert called is False
+    updates = [update async for update in context.result]
+    assert called is True
+    assert [content.type for update in updates for content in update.contents] == [
+        "function_call", "function_result", "text",
+    ]
+    assert updates[-1].contents[0].text.startswith("### What stands out")

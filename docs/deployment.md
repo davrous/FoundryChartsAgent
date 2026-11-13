@@ -34,12 +34,12 @@ Obtain approval for the subscription, tenant, region, project, existing model,
 storage account/container, deployment, and live model smoke test. Do not treat
 this repository's example resource names as permission to use those resources.
 
-The checked-in `services.ai-project.endpoint` in
-[azure.yaml](../azure.yaml) names the original author's project. For another
-project, change that value to the approved endpoint **as well as** configuring
-the environment below. Keep the `charts-agent` service key and its `name` aligned
-if intentionally renaming the agent. Keep `deployments: []`: the sample reuses a
-model rather than provisioning one.
+The `services.ai-project.endpoint` in [azure.yaml](../azure.yaml) resolves from
+the selected azd environment's `AZURE_AI_PROJECT_ENDPOINT`. Configure that value
+to the approved endpoint below and keep it aligned with
+`FOUNDRY_PROJECT_ENDPOINT`. Keep the `charts-agent` service key and its `name`
+aligned if intentionally renaming the agent. Keep `deployments: []`: the sample
+reuses a model rather than provisioning one.
 
 ## 2. Separate local and production configuration
 

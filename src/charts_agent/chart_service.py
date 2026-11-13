@@ -25,13 +25,13 @@ class ChartService:
         self.render_slots = asyncio.Semaphore(2)
 
     async def schema(self) -> dict:
-        await report_progress("Reading the available sample sales dimensions and filters...")
+        await report_progress("Calling get_data_schema: reading the available sample sales dimensions and filters...")
         response = await self.http.get("/schema")
         response.raise_for_status()
         return response.json()
 
     async def create(self, request: ChartRequest) -> ChartBundle:
-        await report_progress("Querying the sample sales data...")
+        await report_progress("Calling create_chart: querying the sample sales data...")
         response = await self.http.post("/query", json=request.query.model_dump())
         if response.status_code == 422:
             raise ValueError(f"Invalid data query: {response.text}")
@@ -49,10 +49,10 @@ class ChartService:
 
     async def _render(self, request: ChartInput, rows: list[ChartRow], summary: str) -> ChartBundle:
         async with self.render_slots:
-            await report_progress("Rendering your chart...")
+            await report_progress("Calling create_chart: rendering your chart...")
             rendered = await asyncio.to_thread(render_chart, request, rows)
         chart_id = uuid4().hex
-        await report_progress("Saving the chart images and preparing the Adaptive Card...")
+        await report_progress("Calling create_chart: saving the chart images and preparing the Adaptive Card...")
         images = await self.artifacts.save(chart_id, rendered.png, rendered.svg)
         card, supported, reason = adaptive_card(request, rows, images["png"])
         return ChartBundle(

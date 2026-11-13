@@ -19,6 +19,16 @@ from m365sideloadmanifest.build_package import (
 ROOT = Path(__file__).resolve().parents[1] / "m365sideloadmanifest"
 
 
+def test_manifest_uses_same_bot_identity_for_teams_and_copilot():
+    manifest = json.loads((ROOT / "manifest.json").read_bytes())
+    bot_id = manifest["bots"][0]["botId"]
+    assert manifest["webApplicationInfo"]["id"] == bot_id
+    assert [
+        (agent["id"], agent["type"])
+        for agent in manifest["copilotAgents"]["customEngineAgents"]
+    ] == [(bot_id, "bot")]
+
+
 def test_manifest_allows_only_the_observed_chart_image_hosts():
     manifest = json.loads((ROOT / "manifest.json").read_bytes())
     assert manifest["validDomains"] == [

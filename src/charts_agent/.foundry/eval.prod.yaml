@@ -1,0 +1,7 @@
+name: charts-agent-prod-smoke
+agent:
+    name: charts-agent
+    kind: hosted
+options:
+    eval_model: gpt-5.4-mini
+max_samples: 15

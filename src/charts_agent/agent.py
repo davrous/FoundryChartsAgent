@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
@@ -29,7 +30,7 @@ class Caller:
 CALLER: ContextVar[Caller | None] = ContextVar("chart_caller", default=None)
 
 
-def chart_text(bundles: list[ChartBundle], output: str) -> str:
+def chart_text(bundles: list[ChartBundle], output: str, analysis: str = "") -> str:
     sections = []
     for bundle in bundles:
         if output == "interactive":
@@ -41,7 +42,19 @@ def chart_text(bundles: list[ChartBundle], output: str) -> str:
                 f"{bundle.summary}\n\n![Chart]({bundle.images['png']})\n\n"
                 f"[Download scalable SVG]({bundle.images['svg']})"
             )
+    if analysis := analysis.strip():
+        sections.append(analysis)
     return "\n\n".join(sections)
+
+
+def final_text(caller: Caller, analysis: str) -> str:
+    if not (caller.bundles or caller.analyses):
+        return analysis
+    # Uploaded files are untrusted: emit only deterministic analyses, never model prose about them.
+    model_analysis = "" if caller.table is not None else analysis
+    return "\n\n".join([
+        *caller.analyses, chart_text(caller.bundles, caller.output, model_analysis),
+    ]).strip()
 
 
 class ChartOutputMiddleware(AgentMiddleware):
@@ -53,33 +66,54 @@ class ChartOutputMiddleware(AgentMiddleware):
     async def process(self, context: AgentContext, call_next: Callable[[], Awaitable[None]]) -> None:
         caller = CALLER.get() or Caller()
         if context.stream:
-            upstream = None
-            if not caller.request:
-                await call_next()
-                if not isinstance(context.result, ResponseStream):
-                    raise TypeError("Expected an Agent Framework response stream")
-                upstream = context.result
-
             async def stream():
                 token = CALLER.set(caller)
+                producer = None
                 try:
                     buffered = []
-                    if caller.request:
-                        caller.bundles.append(await self.service.create(caller.request))
-                    elif upstream is not None:
-                        async for update in upstream:
-                            buffered.extend(c.text for c in update.contents if c.type == "text" and c.text)
-                            update.contents = [c for c in update.contents if c.type != "text"]
-                            if update.contents:
-                                yield update
-                    text = "\n\n".join([
-                        *caller.analyses, chart_text(caller.bundles, caller.output),
-                    ]).strip() if caller.bundles or caller.analyses else "".join(buffered)
+                    queue: asyncio.Queue[AgentResponseUpdate | Exception | object] = asyncio.Queue()
+                    finished = object()
+                    requested_chart = caller.request
+
+                    async def produce() -> None:
+                        try:
+                            if requested_chart is not None:
+                                caller.bundles.append(await self.service.create(requested_chart))
+                                return
+                            await call_next()
+                            if not isinstance(context.result, ResponseStream):
+                                raise TypeError("Expected an Agent Framework response stream")
+                            async for update in context.result:
+                                buffered.extend(c.text for c in update.contents if c.type == "text" and c.text)
+                                update.contents = [c for c in update.contents if c.type != "text"]
+                                if update.contents:
+                                    await queue.put(update)
+                        except Exception as error:
+                            await queue.put(error)
+                        finally:
+                            await queue.put(finished)
+
+                    producer = asyncio.create_task(produce())
+                    while True:
+                        item = await queue.get()
+                        if item is finished:
+                            break
+                        if isinstance(item, Exception):
+                            raise item
+                        yield item
+                    await producer
+                    text = final_text(caller, "".join(buffered))
                     yield AgentResponseUpdate(
                         role="assistant", contents=[Content.from_text(text)],
                         message_id=f"chart-{uuid4().hex}",
                     )
                 finally:
+                    if producer is not None and not producer.done():
+                        producer.cancel()
+                        try:
+                            await producer
+                        except asyncio.CancelledError:
+                            pass
                     CALLER.reset(token)
 
             context.result = ResponseStream(stream(), finalizer=AgentResponse.from_updates)
@@ -96,11 +130,17 @@ class ChartOutputMiddleware(AgentMiddleware):
                 result = context.result
                 if not isinstance(result, AgentResponse):
                     raise TypeError("Expected an Agent Framework response")
+                analysis = "".join(
+                    content.text
+                    for message in result.messages
+                    for content in message.contents
+                    if content.type == "text" and content.text
+                )
                 # Retain tool calls/results for follow-up queries, but not the model's rendering prose.
                 for message in result.messages:
                     message.contents = [c for c in message.contents if c.type != "text"]
                 result.messages = [m for m in result.messages if m.contents]
-                text = "\n\n".join([*caller.analyses, chart_text(caller.bundles, caller.output)]).strip()
+                text = final_text(caller, analysis)
                 result.messages.append(Message("assistant", [Content.from_text(text)]))
         finally:
             CALLER.reset(token)
@@ -129,7 +169,12 @@ def create_agent(service: ChartService, endpoint: str, model: str) -> Agent:
             raise ValueError("This sample permits at most three charts per turn")
         bundle = await service.create(request)
         caller.bundles.append(bundle)
-        return json.dumps({"id": bundle.id, "summary": bundle.summary, "request": request.model_dump()})
+        return json.dumps({
+            "id": bundle.id,
+            "summary": bundle.summary,
+            "request": request.model_dump(),
+            "rows": [row.model_dump() for row in bundle.rows],
+        })
 
     def file_caller() -> tuple[Caller, Table]:
         caller = CALLER.get()
@@ -196,6 +241,10 @@ def create_agent(service: ChartService, endpoint: str, model: str) -> Agent:
             "Explain tool errors; do not claim a chart exists "
             "after a failed tool. No SQL or executable code. Rendering and channel selection are handled by "
             "the application; do not output image URLs, HTML, JSON fences or fabricated chart markup yourself. "
-            "Keep answers brief; clearly label only the built-in database as synthetic."
+            "After every successful create_chart call, provide concise first-level analysis grounded only in "
+            "the returned rows: identify the most important leaders, laggards, trend changes or unusual values "
+            "that the chart supports, then state a practical decision implication or a useful next drill-down. "
+            "Do not infer causes, forecasts or facts that the rows do not establish. Keep the analysis easy to "
+            "scan with a short heading and bullets. Keep non-chart answers brief; clearly label only the built-in database as synthetic."
         ),
     )

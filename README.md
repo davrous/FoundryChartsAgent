@@ -384,8 +384,10 @@ curl http://localhost:8088/responses \
   -d '{"input":"Show 2025 revenue by region","stream":false}'
 ```
 
-The response contains Markdown links to the PNG and SVG. Both streaming and
-non-streaming Responses calls are supported. See
+The response contains Markdown links to the PNG and SVG plus concise,
+data-grounded analysis and a decision-oriented next step. Streaming Responses
+preserve native tool-call and tool-result events but do not emit application
+status messages. See
 [protocol contracts](#protocol-contracts) to request interactive output from
 your own client.
 
@@ -482,6 +484,11 @@ Azure Developer CLI (`azd`) commands, configuration and role-assignment steps.
 Only settings declared in `azure.yaml` under `environmentVariables` are
 explicitly forwarded to the deployed application. Add any intended runtime
 override there as well as in the production azd environment.
+
+For client-side streaming tests, `TOOL_PROGRESS_DELAY_SECONDS` can pause for
+0-10 seconds after each visible tool-stage message. It defaults to `0`; keep it
+disabled outside deliberate UX testing because it adds latency to every chart
+tool call that has an active streaming reporter.
 
 ### 2. Publish the Activity app to Teams and Microsoft 365 Copilot
 
@@ -660,10 +667,15 @@ its fallback and card-action behavior.
 
 ### Live progress and long-running chart delivery
 
-The Activity adapter reports real stages: schema discovery, querying,
-rendering and artifact preparation. It uses SDK streaming where supported
-and ordinary progress messages otherwise. Summary and chart attachments
-share one final outgoing Activity.
+Streaming Responses preserve the model's native tool-call and tool-result
+events without adding assistant status messages. Their completed output combines
+the chart summary and links or interactive payload with concise first-level
+analysis grounded in the returned chart rows.
+
+The Activity adapter reports the real `get_data_schema` and `create_chart`
+stages. It uses SDK streaming where
+supported and ordinary progress messages otherwise. Summary and chart
+attachments share one final outgoing Activity.
 
 By default, work that exceeds **35 seconds** hands off to background delivery
 through a fresh authenticated connector. Keepalives run every **15 seconds**;
@@ -684,6 +696,8 @@ conversation coordination and delivery deduplication.
   artifact retention and cleanup. Do not log or publish signed URLs.
 - `ARTIFACT_TTL_MINUTES` supports 1-1440 minutes. Hosted overrides require
   forwarding in `azure.yaml`; local `.env` values do not configure deployment.
+- `TOOL_PROGRESS_DELAY_SECONDS` supports 0-10 seconds and defaults to 0. Use it
+  only to make streamed tool-stage messages easier to observe during testing.
 - Local artifact files persist until cleaned up. Foundry hosting rejects
   development/local-artifact configuration; remote clients cannot use
   localhost image URLs.

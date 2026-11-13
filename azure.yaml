@@ -25,6 +25,8 @@ services:
               value: ${AZURE_STORAGE_ACCOUNT_URL}
             - name: AZURE_STORAGE_CONTAINER
               value: ${AZURE_STORAGE_CONTAINER}
+            - name: TOOL_PROGRESS_DELAY_SECONDS
+              value: ${TOOL_PROGRESS_DELAY_SECONDS}
         codeConfiguration:
             dependencyResolution: remote_build
             entryPoint: main.py
@@ -41,16 +43,15 @@ services:
                 - AI Agent Hosting
                 - Azure AI AgentServer
                 - Responses Protocol
+                - Activity Protocol
                 - Streaming
         name: charts-agent
         protocols:
             - protocol: responses
               version: 2.0.0
-            - protocol: activity
-              version: 2.0.0
     ai-project:
         host: azure.ai.project
         deployments: []
-        endpoint: https://davrousfoundry.services.ai.azure.com/api/projects/proj-dav
+        endpoint: ${AZURE_AI_PROJECT_ENDPOINT}
 infra:
     provider: microsoft.foundry
